@@ -8,7 +8,7 @@ Inspect the UI tree, grab durable selectors, build no-code automation flows on a
 
 [![Python](https://img.shields.io/badge/Python-stdlib-3776ab?logo=python&logoColor=white)](#-requirements)
 [![ADB](https://img.shields.io/badge/ADB-powered-3ddc84?logo=android&logoColor=white)](#)
-[![MCP](https://img.shields.io/badge/MCP-20_tools-7c3aed)](#-mcp-setup-for-an-ai-agent)
+[![MCP](https://img.shields.io/badge/MCP-21_tools-7c3aed)](#-mcp-setup-for-an-ai-agent)
 [![Emulators](https://img.shields.io/badge/Emulators-MuMu·LDPlayer·MEmu·Nox·BlueStacks-0ea5e9)](#-emulator-manager)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -24,7 +24,7 @@ Inspect the UI tree, grab durable selectors, build no-code automation flows on a
 - 🧩 **Automate** — snap steps together on a free canvas, loop over data rows, export to Python / MCP / JSON
 - 📦 **Browse** — every installed app and **every** activity (via androguard), searchable across all apps
 - 🎛️ **Manage** — create / open / close / restart / delete emulator instances across 5 brands, with Android-version & device-fingerprint templates
-- 🧠 **MCP-native** — 20 tools so Claude (or any MCP client) can do all of the above in plain language
+- 🧠 **MCP-native** — 21 tools so Claude (or any MCP client) can do all of the above in plain language
 
 > Built for RE / automation / multi-account work on **your own** devices and lab. Everything runs locally; nothing phones home.
 
@@ -79,7 +79,13 @@ Inspect the UI tree, grab durable selectors, build no-code automation flows on a
 - 📦 **App & activity browser** — every package and **every** activity from the APK (androguard), exported/launcher flags, deep links, permissions; launch any activity, make a Windows `.lnk` shortcut, enable/disable/uninstall/backup.
 - 🧭 **Cross-app activity search** — type `add an account` and find `Settings · AddAccountSettings` across all apps, grouped by app, each openable (Shortcut-Maker style).
 - 🎛️ **Emulator Manager** — create / open / close / restart / delete / rename / clone across **MuMu, LDPlayer (9/14/4), MEmu, Nox, BlueStacks** via each vendor's CLI, with an **Android-version picker** on create and a **device-settings template** (CPU, RAM, resolution, manufacturer, model, IMEI, Android ID, MAC, phone number) for multi-account isolation.
-- 🧠 **MCP server** — 20 tools so an AI agent can see the screen, read the tree, act with selectors, browse apps, and manage emulators in natural language.
+- ⌨️ **Command palette** (`Ctrl K`) — fuzzy-search every action, device, installed app and activity; recent items first.
+- 🖱️ **Remote-control feel** — in Control mode the keyboard types straight to the device (Enter/Backspace/Tab/arrows/Esc=Back) and the mouse wheel scrolls; right-click any element (screen or tree) for copy selector / tap / long-press / add to Playground.
+- 📜 **Logcat viewer** — live tail with "this app only", min level, text filter, pause/clear/copy.
+- 🎥 **Screen recording** (MP4, up to 3 min) and one-click **PNG screenshot** download.
+- 📱 **Device info** — model, Android/SDK, ABI, screen, battery, IP, uptime, storage, RAM.
+- 🗂️ **Playground flow library** — many named flows (new / rename / duplicate / delete), real **undo/redo** (`Ctrl Z` / `Ctrl Shift Z`), disable a step, run one step / run from here, Delete & `Ctrl D` shortcuts, and **Steps → Playground** to turn a recording into a flow.
+- 🧠 **MCP server** — 21 tools so an AI agent can see the screen, read the tree, act with selectors, browse apps, and manage emulators in natural language.
 
 ---
 
@@ -160,6 +166,7 @@ Device settings usually need the instance **stopped**; restart it after applying
 - Port clashes: BlueStacks binds `127.0.0.1:5555`; LDPlayer 9 binds `0.0.0.0:5555` (reachable via any non-loopback local IP — scan handles this). LDPlayer's `0.0.0.0` bind exposes ADB to the LAN with no auth — trusted networks only.
 - `uiautomator dump` can fail on screens that never go idle (video, WebViews, heavy animation). The run engine now retries with back-off and keeps polling within each step's timeout instead of failing instantly; for truly never-idle screens, fall back to `screenshot()` + coordinates.
 - Taps auto-dismiss the soft keyboard first for non-text targets — the keyboard isn't in the UI dump, so bottom buttons (NEXT / Submit) could otherwise be tapped "through" it, causing flaky runs.
+- 🔒 The server only answers requests from its own page on `127.0.0.1`/`localhost` (Host, Origin and `Sec-Fetch-Site` are checked), so random websites can't drive your device. State-changing routes (uninstall, emulator actions, update, logcat clear, screen record) also require the header `X-Inceptor: 1` — add it when scripting them with curl.
 - Automating real accounts on platforms (Google / Shopee / TikTok / WhatsApp) risks rate-limits and bans — pace actions like a human.
 
 ## 📄 License

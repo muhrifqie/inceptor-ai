@@ -3,14 +3,12 @@
 Register:  claude mcp add -s user android-inceptor -- python "C:\\BOT\\Android Inceptor\\mcp_server.py"
 Selectors: same XPath the web UI generates (tags = Android class names), or simple text/resource_id/desc fields.
 """
-import io
 import json
 import re
 import time
 
 from lxml import etree
 from mcp.server.fastmcp import FastMCP, Image
-from PIL import Image as PILImage
 
 import server as core
 
@@ -128,13 +126,8 @@ def connect(addr: str) -> str:
 def screenshot(serial: str | None = None, max_width: int = 540) -> Image:
     """Screenshot of the device as JPEG, downscaled to max_width (coordinates in ui_tree/find stay in real device pixels;
     multiply image coords by device_width/max_width if you read positions off the image)."""
-    png = core.adb("exec-out", "screencap", "-p", serial=_serial(serial), binary=True)
-    im = PILImage.open(io.BytesIO(png)).convert("RGB")
-    if im.width > max_width:
-        im = im.resize((max_width, round(im.height * max_width / im.width)))
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=75)
-    return Image(data=buf.getvalue(), format="jpeg")
+    # raw screencap -> JPEG (same path as the web stream; skips the slow on-device PNG encode of `screencap -p`)
+    return Image(data=core.frame_jpeg(_serial(serial), 75, max_width), format="jpeg")
 
 
 @mcp.tool()
@@ -175,9 +168,17 @@ def tap(x: int | None = None, y: int | None = None, xpath: str | None = None, te
     long_press_ms > 0 does a long press."""
     s = _serial(serial)
     if x is None or y is None:
-        els = _query(_tree(s), xpath, text, resource_id, desc, class_name, contains)
+        find_el = lambda: _query(_tree(s), xpath, text, resource_id, desc, class_name, contains)
+        els = find_el()
         if len(els) <= index:
             raise RuntimeError(f"Selector matched {len(els)} element(s); nothing at index {index}")
+        # Same as the web replay: the soft keyboard isn't in the UI dump and can cover a bottom button, so for
+        # non-text targets hide it first, then re-locate (bounds can shift once it's gone).
+        if "EditText" not in (els[index].get("class") or els[index].tag or "") and core._hide_kbd(s):
+            time.sleep(0.2)
+            again = find_el()
+            if len(again) > index:
+                els = again
         b = _bounds(els[index])
         x, y = (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
         what = _fmt(els[index])
@@ -232,12 +233,20 @@ def wait_for(xpath: str | None = None, text: str | None = None, resource_id: str
     s = _serial(serial)
     end = time.time() + timeout
     while True:
-        els = _query(_tree(s), xpath, text, resource_id, desc, class_name, contains)
-        if gone and not els:
-            return "gone"
-        if els and not gone:
-            return _fmt(els[0])
+        try:  # one dump try per poll, capped by the deadline; a never-idle screen just means "poll again"
+            els = _query(_tree(s, tries=1, deadline=end), xpath, text, resource_id, desc, class_name, contains)
+        except (ValueError, etree.XPathError):
+            raise
+        except Exception as e:  # noqa: BLE001
+            els, err = None, e
+        if els is not None:
+            if gone and not els:
+                return "gone"
+            if els and not gone:
+                return _fmt(els[0])
         if time.time() > end:
+            if els is None:
+                raise TimeoutError(f"screen wouldn't settle for a UI read within {timeout}s: {err}")
             raise TimeoutError(f"timeout after {timeout}s ({'still present' if gone else 'not found'})")
         time.sleep(0.5)
 
@@ -256,8 +265,12 @@ def app(action: str, package: str | None = None, serial: str | None = None) -> s
         return core.adb("shell", "pm", "list", "packages", "-3", serial=s).replace("package:", "")
     if not package or not re.fullmatch(r"[\w.]+", package):
         raise ValueError("package required, e.g. com.android.chrome")
-    cmd = {"start": ["monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
-           "stop": ["am", "force-stop", package], "clear": ["pm", "clear", package]}[action]
+    if action == "start":  # am start on the resolved launcher activity (same as the web UI), not monkey
+        r = core.start_activity(s, package)
+        return f"started {r['component'] or package}"
+    if action not in ("stop", "clear"):
+        raise ValueError("action must be current | intent | start | stop | clear | list")
+    cmd = {"stop": ["am", "force-stop", package], "clear": ["pm", "clear", package]}[action]
     return core.adb("shell", *cmd, serial=s) or "ok"
 
 
@@ -271,14 +284,29 @@ def apps(kind: str = "user", serial: str | None = None) -> str:
 
 @mcp.tool()
 def activities(package: str, exported_only: bool = False, serial: str | None = None) -> str:
-    """Every activity of an app (from its APK via androguard), with exported flag, launcher mark and deep links.
-    Use start_activity to open one. exported_only hides activities you can't launch without root."""
-    d = core.app_detail(_serial(serial), package)
+    """Every activity of an app (streamed from its AndroidManifest, no full APK pull), with exported flag, launcher mark
+    and deep links. Use start_activity to open one. exported_only hides activities you can't launch without root."""
+    d = core.app_acts(_serial(serial), package, labels=True)
     acts = [a for a in d["activities"] if a["exported"] or not exported_only]
-    head = f"{d['label']} ({d['package']}) v{d['versionName']} - {d['activityCount']} activities, {d['exportedCount']} exported"
+    head = f"{d['label'] or package} ({d['package']}) vc{d['versionCode']} - {d['activityCount']} activities, {d['exportedCount']} exported"
     lines = [("★" if a["launcher"] else ("+" if a["exported"] else "-")) + " " + a["name"] for a in acts]
     links = ("\ndeep links:\n" + "\n".join("  " + x["uri"] + "  -> " + x["activity"] for x in d["deepLinks"])) if d["deepLinks"] else ""
     return head + "\n(★ launcher, + exported/openable, - needs root)\n" + "\n".join(lines) + links
+
+
+@mcp.tool()
+def search_activities(query: str, serial: str | None = None) -> str:
+    """Find activities across ALL installed apps by class name or label (e.g. 'wifi settings', 'account'), grouped by
+    app. Each line is a component you can pass to start_activity(package, activity)."""
+    groups = core.search_activities(_serial(serial), query) or []
+    if not groups:
+        return "no matching activities (query needs 2+ characters)"
+    out = []
+    for g in groups:
+        out.append(f"{g['label']} ({g['package']})")
+        out += [("  ★ " if a["launcher"] else "  + " if a["exported"] else "  - ") + a["name"]
+                + (f"  '{a['label']}'" if a.get("label") else "") for a in g["activities"]]
+    return "(★ launcher, + exported/openable, - needs root)\n" + "\n".join(out)
 
 
 @mcp.tool()
@@ -292,9 +320,10 @@ def start_activity(package: str, activity: str | None = None, action: str | None
 
 @mcp.tool()
 def app_manage(action: str, package: str, serial: str | None = None) -> str:
-    """Manage an app. action: enable | disable (hide, reversible) | uninstall | backup (pull its APK to .apkcache) | logcat (recent lines)."""
+    """Manage an app. action: enable | disable (hide, reversible) | uninstall | backup (pull all its APKs, splits
+    included, to ~/Downloads/Inceptor/<pkg>-<version>/) | logcat (recent lines)."""
     r = core.app_manage(_serial(serial), package, action)
-    return r.get("log") or r.get("msg") or "ok"
+    return r.get("log") or (r.get("msg", "ok") + (f"\n{r['path']}" if r.get("path") else ""))
 
 
 @mcp.tool()
@@ -309,8 +338,8 @@ def emulator(action: str, brand: str | None = None, index: str | None = None,
     """Manage emulator instances across brands (mumu, ld9, ld14, ld4, memu, nox, bs).
     action: list (all brands + instances) | launch | stop | restart | delete | create | rename | clone.
     launch/stop/restart/delete need brand + index (for bs, index is the instance name).
-    create needs brand (+ optional name for ld/nox, + optional android_version). rename needs brand + index + name.
-    clone needs brand + index (+ optional name for ld/nox). Use emulator_config to set a device template.
+    create needs brand (+ optional name, + optional android_version). rename needs brand + index + name.
+    clone needs brand + index (+ optional name). Use emulator_config to set a device template.
     android_version choices on create: mumu auto|12|15, memu 44|51|71|76|90|96|120, nox 4|5|7 (ld/bs fixed).
     'list' shows each brand's version options under (versions: ...). Returns the refreshed list after a change."""
     emu = core.emulators

@@ -11,8 +11,10 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +22,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import emulators
+
+try:  # androguard logs every parsed chunk at DEBUG via loguru (thousands of lines per app): keep warnings only
+    from loguru import logger as _lg
+    _lg.remove()
+    _lg.add(sys.stderr, level="WARNING")
+except Exception:  # noqa: BLE001
+    pass
 
 ROOT = Path(__file__).parent
 # Common emulator ADB ports on localhost (MuMu, LDPlayer, Nox, MEmu, BlueStacks).
@@ -190,14 +199,43 @@ def node_to_dict(el):
     }
 
 
-def dump_xml(serial):
-    path = "/sdcard/window_dump.xml"
-    last = ""
-    for i in range(5):  # dump fails on animated / never-idle screens ("could not get idle state"); back off so a brief settle window is caught
-        last = adb("shell", "uiautomator", "dump", path, serial=serial, timeout=30, check=False)
-        if "dumped to" in last.lower():
-            return adb("exec-out", "cat", path, serial=serial, binary=True)
-        time.sleep(0.4 + 0.25 * i)
+_key_locks = {}
+_key_locks_g = threading.Lock()
+
+
+def _key_lock(key):
+    with _key_locks_g:
+        return _key_locks.setdefault(key, threading.Lock())
+
+
+def dump_xml(serial, tries=5, deadline=None):
+    """UI dump as XML bytes. Serialized per device (two concurrent `uiautomator dump`s kill each other) and written to a
+    unique file so another process (the MCP server) never reads a half-written dump. deadline (epoch secs) caps the
+    whole call, including the wait for the lock, so act()'s timeout holds."""
+    left = lambda: (deadline - time.time()) if deadline else 30
+    lock = _key_lock(("dump", serial))
+    if not lock.acquire(timeout=max(0.1, left()) if deadline else -1):
+        raise RuntimeError("UI dump busy (another dump on this device is still running)")
+    path = f"/sdcard/inc_{uuid.uuid4().hex[:8]}.xml"
+    last, done = "", False
+    try:
+        for i in range(tries):  # dump fails on animated / never-idle screens ("could not get idle state"); back off so a brief settle window is caught
+            if i and deadline and left() <= 0:
+                break
+            last = adb("shell", "uiautomator", "dump", path, serial=serial, timeout=max(3, min(30, left())), check=False)
+            if "dumped to" in last.lower():
+                out = adb("exec-out", f"cat {path}; rm -f {path}", serial=serial, binary=True)
+                done = True
+                return out
+            if i < tries - 1:
+                time.sleep(0.4 + 0.25 * i)
+    finally:
+        if not done:  # also after an adb timeout: the device may still finish the dump, and every call uses a new name
+            try:
+                adb("shell", "rm", "-f", path, serial=serial, check=False, timeout=5)
+            except Exception:  # noqa: BLE001 - never mask the original error
+                pass
+        lock.release()
     raise RuntimeError((last or "").strip() or "uiautomator dump failed")
 
 
@@ -270,7 +308,8 @@ def current_intent(serial):
     it["am_start"] = "adb shell am start" + (f" -a {it['action']}" if it["action"] else "") \
         + "".join(f" -c {x}" for x in it["categories"]) + (f" -f {it['flags']}" if it["flags"] else "") \
         + (f" -d '{it['data']}'" if it["data"] else "") + (f" -t {it['type']}" if it["type"] else "") \
-        + (f" -n {comp}" if c else f" {pkg}")
+        + ((f" -n '{comp.replace('$', chr(92) + '$')}'" if "$" in comp else f" -n {comp}") if c else f" {pkg}")
+    # ^ inner-class components: single quotes stop bash/PowerShell expanding $, and \$ stops the device sh doing it
     it["u2"] = f'd.app_start("{pkg}", "{c["className"]}")' if c else f'd.app_start("{pkg}")'
     return it
 
@@ -292,20 +331,21 @@ _warm_pool = ThreadPoolExecutor(8)  # extract icons 8-at-a-time server-side, pas
 _warming = set()
 
 
-def warm_icons(serial, pkgs):
-    """Fire-and-forget: pre-extract icons in parallel so the browser's <img> requests become instant cache hits."""
-    def go(pk):
+def warm_icons(serial, rows):
+    """Fire-and-forget: pre-extract icons in parallel so the browser's <img> requests become instant cache hits.
+    rows = list_apps() rows; their versionCode saves a dumpsys per app."""
+    def go(pk, vc):
         try:
-            app_icon(serial, pk)
+            app_icon(serial, pk, vc)
         except Exception:  # noqa: BLE001
             pass
         finally:
             _warming.discard((serial, pk))
-    for pk in pkgs:
-        key = (serial, pk)
+    for r in rows:
+        key = (serial, r["package"])
         if key not in _warming:
             _warming.add(key)
-            _warm_pool.submit(go, pk)
+            _warm_pool.submit(go, r["package"], r.get("versionCode"))
 
 
 def _pkg(p):
@@ -367,13 +407,43 @@ def list_apps(serial, kind="user"):
     return apps
 
 
+def _apk_device_paths(serial, pkg):
+    """Every apk of an install: base.apk first, then split_config.*.apk (Play Store apps are usually split)."""
+    paths = adb("shell", "pm", "path", _pkg(pkg), serial=serial, check=False).splitlines()  # unknown pkg: exit 1, no lines
+    return [l.split(":", 1)[1].strip() for l in paths if l.startswith("package:")]
+
+
+def _short_err(out, fallback):
+    """One readable line out of adb/pm output: the 'XxxException: msg' line of a stack trace, else the first line."""
+    lines = [l.strip() for l in (out or "").splitlines() if l.strip()]
+    return next((l for l in lines if re.search(r"\w+(Exception|Error): ", l)), lines[0] if lines else fallback)
+
+
 def _apk_device_path(serial, pkg):
-    paths = adb("shell", "pm", "path", _pkg(pkg), serial=serial).splitlines()
-    return next((l.split(":", 1)[1].strip() for l in paths if l.startswith("package:")), None)
+    return next(iter(_apk_device_paths(serial, pkg)), None)
 
 
-def _pull_apk(serial, pkg):
+def apk_backup(serial, pkg):
+    """Pull ALL apks (base + splits) into ~/Downloads/Inceptor/<pkg>-<version>/, ready for `adb install-multiple`."""
     vn, vc = pkg_version(serial, pkg)
+    paths = _apk_device_paths(serial, pkg)
+    if not paths:
+        raise RuntimeError("apk path not found")
+    ver = re.sub(r"[^\w.\-]+", "_", vn or str(vc))
+    dst = Path.home() / "Downloads" / "Inceptor" / f"{pkg}-{ver}"
+    dst.mkdir(parents=True, exist_ok=True)
+    names = []
+    for p in paths:
+        name = p.rsplit("/", 1)[-1]
+        adb("pull", p, str(dst / name), serial=serial, timeout=300)
+        names.append(name)
+    return {"msg": f"saved {len(names)} apk" + (" (split)" if len(names) > 1 else ""), "path": str(dst),
+            "files": names, "split": len(names) > 1}
+
+
+def _pull_apk(serial, pkg, vn=None, vc=None):
+    if vc is None:
+        vn, vc = pkg_version(serial, pkg)
     APK_CACHE.mkdir(exist_ok=True)
     dst = APK_CACHE / f"{pkg}-{vc}.apk"
     if not dst.exists():
@@ -514,7 +584,8 @@ def _icon_stream(serial, pkg, out):
     entries (a few MB), never the whole 30-60MB apk. Returns:
       "ok"       wrote a PNG
       "none"     no <application android:icon> at all (most service packages) -> caller caches empty
-      "fallback" has an icon but it's vector / unresolved here -> caller pulls the full apk (legacy-name fallback)."""
+      "fallback" has an icon but it's vector / unresolved here -> caller caches empty; app_detail's full-apk parse retries it
+      "error"    adb/parse failure (often transient under load) -> caller caches nothing, next request retries."""
     import io as _io
     apk = _apk_device_path(serial, pkg)
     if not apk:
@@ -542,7 +613,7 @@ def _icon_stream(serial, pkg, out):
                 out.write_bytes(buf.getvalue())
                 return "ok"
     except Exception:  # noqa: BLE001
-        pass
+        return "error"
     return "fallback"
 
 
@@ -588,93 +659,139 @@ def _icon(a, pkg, vc):
     return None
 
 
+def _view_links(activity, data):
+    """Deep links of one VIEW intent-filter. data = its <data> attrs ({scheme, host, path...}); scheme/host/path may sit
+    on separate <data> elements and combine. Custom schemes always count; http(s) only with a host."""
+    schemes = [d["scheme"] for d in data if d.get("scheme")]
+    hosts = [d["host"] for d in data if d.get("host")] or [""]
+    path = next((d.get("pathPrefix") or d.get("path") for d in data if d.get("pathPrefix") or d.get("path")), "")
+    return [{"activity": activity, "uri": f"{s}://{h}{path}"}
+            for s in schemes for h in hosts if s not in ("http", "https") or h]
+
+
+def _uniq_links(links):
+    seen = set()
+    return [x for x in links if not (x["uri"] in seen or seen.add(x["uri"]))][:40]
+
+
 def app_detail(serial, pkg):
-    """Parse the apk with androguard: label, all activities (exported flag + intent-filters), permissions, deep links."""
+    """Parse the apk with androguard: label, all activities (exported flag + intent-filters), permissions, deep links.
+    The parsed result is cached per versionCode (<pkg>-<vc>.detail.json), so the full apk is pulled and parsed once."""
     _pkg(pkg)
     with _pkg_lock(pkg):  # serialize only same-package work; different apps parse in parallel
-        dst, vn, vc = _pull_apk(serial, pkg)
-        from androguard.core.apk import APK
-        try:
-            from loguru import logger
-            logger.remove()
-        except Exception:  # noqa: BLE001
-            pass
-        a = APK(str(dst))
-        ns = "{http://schemas.android.com/apk/res/android}"
-        man = a.get_android_manifest_xml()
-        acts = []
-        for el in man.iter():
-            if el.tag not in ("activity", "activity-alias"):
-                continue
-            name = el.get(ns + "name")
-            if not name:
-                continue
-            if name.startswith("."):
-                name = a.get_package() + name
-            elif "." not in name:
-                name = a.get_package() + "." + name
-            declared = el.get(ns + "exported")
-            enabled = el.get(ns + "enabled")
-            filters = []
-            for f in el.findall("intent-filter"):
-                filters.append({
-                    "actions": [x.get(ns + "name") for x in f.findall("action")],
-                    "categories": [x.get(ns + "name") for x in f.findall("category")],
-                    "data": [{k.split("}")[-1]: v for k, v in d.attrib.items()} for d in f.findall("data")],
-                })
-            acts.append({"name": name, "exported": declared == "true" or (declared is None and bool(filters)),
-                         "declaredExported": declared, "enabled": enabled != "false",
-                         "launcher": any("android.intent.action.MAIN" in f["actions"]
-                                         and "android.intent.category.LAUNCHER" in f["categories"] for f in filters),
-                         "filters": filters})
-        links = []
-        for act in acts:
-            for f in act["filters"]:
-                if "android.intent.action.VIEW" not in f["actions"]:
-                    continue
-                for d in f["data"]:
-                    sch = d.get("scheme")
-                    if sch and sch not in ("http", "https") or (sch and d.get("host")):
-                        host = d.get("host", "")
-                        path = d.get("pathPrefix") or d.get("path") or ""
-                        links.append({"activity": act["name"], "uri": f"{sch}://{host}{path}"})
-        try:
-            label = a.get_app_name() or pkg
-        except Exception:  # noqa: BLE001
-            label = pkg
-        acts.sort(key=lambda x: (not x["launcher"], not x["exported"], x["name"]))
-        seen = set()
-        links = [x for x in links if not (x["uri"] in seen or seen.add(x["uri"]))]
+        vn, vc = pkg_version(serial, pkg)
+        cf = APK_CACHE / f"{pkg}-{vc}.detail.json"
+        d = None
+        if vc and cf.exists():
+            try:
+                d = json.loads(cf.read_text("utf-8"))
+            except Exception:  # noqa: BLE001
+                d = None
+        if d is None:
+            d = _app_detail_parse(serial, pkg, vn, vc)
+            if vc:
+                try:
+                    cf.write_text(json.dumps(d), "utf-8")
+                except Exception:  # noqa: BLE001
+                    pass
         disabled = pkg in {l.split(":")[-1] for l in adb("shell", "pm", "list", "packages", "-d", serial=serial, check=False).splitlines() if ":" in l}
-        return {"package": a.get_package(), "label": label, "versionName": vn, "versionCode": vc, "enabled": not disabled,
-                "activities": acts, "activityCount": len(acts), "exportedCount": sum(x["exported"] for x in acts),
-                "permissions": sorted(a.get_permissions()), "deepLinks": links[:40],
-                "hasIcon": _icon(a, pkg, vc) is not None}
+        ico = APK_CACHE / f"{pkg}-{vc}.icon"
+        return {**d, "enabled": not disabled, "hasIcon": ico.exists() and ico.stat().st_size > 0}
+
+
+def _app_detail_parse(serial, pkg, vn, vc):
+    """Pull the full base.apk and parse it with androguard (slow path; app_detail caches the result)."""
+    dst, vn, vc = _pull_apk(serial, pkg, vn, vc)
+    from androguard.core.apk import APK
+    a = APK(str(dst))
+    ns = _NS
+    man = a.get_android_manifest_xml()
+    acts = []
+    for el in man.iter():
+        if el.tag not in ("activity", "activity-alias"):
+            continue
+        name = el.get(ns + "name")
+        if not name:
+            continue
+        if name.startswith("."):
+            name = a.get_package() + name
+        elif "." not in name:
+            name = a.get_package() + "." + name
+        declared = el.get(ns + "exported")
+        enabled = el.get(ns + "enabled")
+        filters = []
+        for f in el.findall("intent-filter"):
+            filters.append({
+                "actions": [x.get(ns + "name") for x in f.findall("action")],
+                "categories": [x.get(ns + "name") for x in f.findall("category")],
+                "data": [{k.split("}")[-1]: v for k, v in d.attrib.items()} for d in f.findall("data")],
+            })
+        acts.append({"name": name, "exported": declared == "true" or (declared is None and bool(filters)),
+                     "declaredExported": declared, "enabled": enabled != "false",
+                     "launcher": any("android.intent.action.MAIN" in f["actions"]
+                                     and "android.intent.category.LAUNCHER" in f["categories"] for f in filters),
+                     "filters": filters})
+    links = [x for act in acts for f in act["filters"] if "android.intent.action.VIEW" in f["actions"]
+             for x in _view_links(act["name"], f["data"])]
+    try:
+        label = a.get_app_name() or pkg
+    except Exception:  # noqa: BLE001
+        label = pkg
+    acts.sort(key=lambda x: (not x["launcher"], not x["exported"], x["name"]))
+    # The full apk is parsed now: retry an icon the cheap paths had marked "none" (vector / unresolved there).
+    ico = APK_CACHE / f"{pkg}-{vc}.icon"
+    if ico.exists() and not ico.stat().st_size:
+        ico.unlink()
+    _icon(a, pkg, vc)
+    d = {"package": a.get_package(), "label": label, "versionName": vn, "versionCode": vc,
+         "activities": acts, "activityCount": len(acts), "exportedCount": sum(x["exported"] for x in acts),
+         "permissions": sorted(a.get_permissions()), "deepLinks": _uniq_links(links)}
+    del a
+    if vc:  # ponytail: result + icon are cached now, so drop the 30-60MB apk (and older versions) instead of hoarding it
+        for old in APK_CACHE.glob(f"{pkg}-*.apk"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    return d
 
 
 _NS = "{http://schemas.android.com/apk/res/android}"
 _actwarm = set()
 
 
-def _app_acts(serial, pkg):
-    """List an app's activities (name + exported/launcher + raw label ref) by streaming ONLY AndroidManifest.xml —
-    no full apk pull, no arsc. Cached to .apkcache/<pkg>-<vc>.acts.json. Labels stay as @refs here; resolved lazily."""
+_ACTS_V = 2  # .acts.json schema; v2 adds "vc" + deepLinks (older files are re-streamed once)
+_acts_mem = {}  # (pkg, vc) -> parsed manifest dict, so a search is a pure in-memory filter after the first
+
+
+def _app_acts(serial, pkg, vc=None):
+    """List an app's activities (name + exported/launcher + raw label ref) and VIEW deep links by streaming ONLY
+    AndroidManifest.xml — no full apk pull, no arsc. Cached in memory and in .apkcache/<pkg>-<vc>.acts.json.
+    Labels stay as @refs here; resolved lazily. vc (from list_apps) skips a per-app dumpsys."""
     _pkg(pkg)
-    vn, vc = pkg_version(serial, pkg)
+    if not vc:
+        vc = pkg_version(serial, pkg)[1]
+    hit = _acts_mem.get((pkg, vc))
+    if hit:
+        return hit
     APK_CACHE.mkdir(exist_ok=True)
     cf = APK_CACHE / f"{pkg}-{vc}.acts.json"
-    if cf.exists():
+    if vc and cf.exists():
         try:
-            return json.loads(cf.read_text("utf-8"))
+            d = json.loads(cf.read_text("utf-8"))
+            if d.get("v") == _ACTS_V:
+                _acts_mem[(pkg, vc)] = d
+                return d
         except Exception:  # noqa: BLE001
             pass
-    out = {"package": pkg, "vc": vc, "labelRef": None, "resolved": False, "activities": []}
+    out = {"v": _ACTS_V, "package": pkg, "vc": vc, "labelRef": None, "resolved": False, "activities": [], "deepLinks": []}
     try:
         from androguard.core.axml import AXMLPrinter
         apk = _apk_device_path(serial, pkg)
         xml = AXMLPrinter(adb("exec-out", "unzip", "-p", apk, "AndroidManifest.xml", serial=serial, binary=True)).get_xml_obj()
         appel = xml.find("application")
         out["labelRef"] = appel.get(_NS + "label") if appel is not None else None
+        links = []
         for el in xml.iter():
             if el.tag not in ("activity", "activity-alias"):
                 continue
@@ -686,19 +803,27 @@ def _app_acts(serial, pkg):
             elif "." not in name:
                 name = pkg + "." + name
             filters = el.findall("intent-filter")
-            launcher = any(any(a.get(_NS + "name") == "android.intent.action.MAIN" for a in f.findall("action"))
+            acts_of = lambda f: [a.get(_NS + "name") for a in f.findall("action")]
+            launcher = any("android.intent.action.MAIN" in acts_of(f)
                            and any(c.get(_NS + "name") == "android.intent.category.LAUNCHER" for c in f.findall("category"))
                            for f in filters)
+            for f in filters:
+                if "android.intent.action.VIEW" in acts_of(f):
+                    links += _view_links(name, [{k.split("}")[-1]: v for k, v in d.attrib.items()} for d in f.findall("data")])
             declared = el.get(_NS + "exported")
             out["activities"].append({"name": name, "labelRef": el.get(_NS + "label"),
                                       "exported": declared == "true" or (declared is None and bool(filters)),
                                       "launcher": launcher})
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        cf.write_text(json.dumps(out), "utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+        out["deepLinks"] = _uniq_links(links)
+    except Exception as e:  # noqa: BLE001 - transient adb/parse failure: return empty but don't cache it
+        out["error"] = str(e) or type(e).__name__
+        return out
+    if vc:
+        _acts_mem[(pkg, vc)] = out
+        try:
+            cf.write_text(json.dumps(out), "utf-8")
+        except Exception:  # noqa: BLE001
+            pass
     return out
 
 
@@ -724,20 +849,20 @@ def _resolve_labels(serial, pkg, refs):
     return res
 
 
-def warm_activities(serial, pkgs):
+def warm_activities(serial, rows):
     """Background: pre-stream each app's manifest so the first cross-app activity search is fast."""
-    def go(pk):
+    def go(pk, vc):
         try:
-            _app_acts(serial, pk)
+            _app_acts(serial, pk, vc)
         except Exception:  # noqa: BLE001
             pass
         finally:
             _actwarm.discard((serial, pk))
-    for pk in pkgs:
-        k = (serial, pk)
+    for r in rows:
+        k = (serial, r["package"])
         if k not in _actwarm:
             _actwarm.add(k)
-            _warm_pool.submit(go, pk)
+            _warm_pool.submit(go, r["package"], r.get("versionCode"))
 
 
 def _resolve_app(serial, d):
@@ -750,15 +875,32 @@ def _resolve_app(serial, d):
     for a in d["activities"]:
         a["label"] = labs.get(a.get("labelRef")) or a["name"].rsplit(".", 1)[-1]
     d["resolved"] = True
-    try:
-        (APK_CACHE / f"{pkg}-{d.get('vc', 0)}.acts.json").write_text(json.dumps(d), "utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+    if d.get("vc"):  # same file _app_acts reads (v1 caches had no "vc", so labels were saved to <pkg>-0 and never hit)
+        try:
+            (APK_CACHE / f"{pkg}-{d['vc']}.acts.json").write_text(json.dumps(d), "utf-8")
+        except Exception:  # noqa: BLE001
+            pass
     return d
 
 
+_apps_cache = {}  # (serial, kind) -> (time, rows): typing a query fires several searches; list the packages once
+_search_gen = {}  # serial -> generation; a newer query makes older in-flight scans bail out
+_search_g = threading.Lock()
+
+
+def _list_apps_cached(serial, kind, ttl=30):
+    hit = _apps_cache.get((serial, kind))
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    rows = list_apps(serial, kind)
+    _apps_cache[(serial, kind)] = (time.time(), rows)
+    return rows
+
+
 def search_activities(serial, q, kind="all", limit=80):
-    """Shortcut-Maker-style: find activities across all apps by class name or resolved label, grouped by app."""
+    """Shortcut-Maker-style: find activities across all apps by class name or resolved label, grouped by app.
+    Returns None when a newer search for the same device superseded this one (its result would be discarded anyway).
+    ponytail: one generation per device, so two search boxes searching at the same instant would cancel each other."""
     q = (q or "").strip().lower()
     if len(q) < 2:
         return []
@@ -766,9 +908,14 @@ def search_activities(serial, q, kind="all", limit=80):
     big = [w for w in toks if len(w) >= 3] or toks  # tokens worth a cheap pre-filter (skip "an", "to", ...)
     if not toks:
         return []
-    apps = list_apps(serial, kind)
+    with _search_g:
+        gen = _search_gen[serial] = _search_gen.get(serial, 0) + 1
+    stale = lambda: _search_gen.get(serial) != gen
+    apps = _list_apps_cached(serial, kind)
     with ThreadPoolExecutor(8) as ex:
-        details = list(ex.map(lambda a: _app_acts(serial, a["package"]), apps))
+        details = list(ex.map(lambda a: None if stale() else _app_acts(serial, a["package"], a["versionCode"]), apps))
+    if stale():
+        return None
     launch = {a["package"]: a["launcher"] for a in apps}
 
     def act_match(a):  # every token must appear in class name OR resolved label
@@ -778,8 +925,10 @@ def search_activities(serial, q, kind="all", limit=80):
     groups = []
     for d in details:
         # cheap pre-filter (no arsc): a significant token hits some class name -> worth resolving labels
-        if not any(w in a["name"].lower() for a in d["activities"] for w in big):
+        if not d or not any(w in a["name"].lower() for a in d["activities"] for w in big):
             continue
+        if stale():
+            return None
         d = _resolve_app(serial, d)  # resolve + cache this app's labels (once), enables label-text matching
         hits = [a for a in d["activities"] if act_match(a)]
         if not hits:
@@ -791,26 +940,50 @@ def search_activities(serial, q, kind="all", limit=80):
     return groups[:limit]
 
 
-def app_icon(serial, pkg):
+def app_acts(serial, pkg, labels=False):
+    """One app's activities from the streamed manifest (no full apk pull): for pickers and the MCP activities tool."""
+    d = _app_acts(serial, pkg)
+    if d.get("error"):
+        if not _apk_device_paths(serial, pkg):
+            raise ApiError(404, f"{pkg} is not installed")
+        raise RuntimeError(f"could not read the manifest of {pkg}: {d['error']}")
+    if labels:
+        d = _resolve_app(serial, d)
+    launch = next((a["name"] for a in d["activities"] if a["launcher"]), None)
+    acts = sorted(d["activities"], key=lambda a: (not a["launcher"], not a["exported"], a["name"]))
+    return {"package": pkg, "versionCode": d.get("vc"), "label": d.get("label"), "launcher": launch,
+            "activities": acts, "activityCount": len(acts), "exportedCount": sum(a["exported"] for a in acts),
+            "deepLinks": d.get("deepLinks", [])}
+
+
+def app_icon(serial, pkg, vc=None):
     """Launcher icon, cached as a small file. Fast path streams one zip entry via on-device `unzip` (no multi-MB pull);
-    the slow path (adaptive / obfuscated names) pulls the apk once and composites with androguard. Runs in parallel."""
+    the slow path (adaptive / obfuscated names) streams manifest + arsc and composites with androguard. Runs in parallel.
+    vc (from the app list / the img URL) skips the dumpsys used to build the cache key."""
     _pkg(pkg)
-    vn, vc = pkg_version(serial, pkg)
+    if not vc:
+        vc = pkg_version(serial, pkg)[1]
+        if not vc:  # dumpsys failed (or timed out): don't cache anything under a bogus <pkg>-0 key
+            raise RuntimeError("versionCode lookup failed")
     f = APK_CACHE / f"{pkg}-{vc}.icon"
-    if not f.exists():  # unknown yet -> extract once (empty file = "no raster icon", so we never re-pull)
+    full = APK_CACHE / f"{pkg}-{vc}.apk"
+    # empty marker = "no raster icon"; but a full apk pulled after it was written can still resolve one -> retry once
+    stale = lambda: f.exists() and not f.stat().st_size and full.exists() and full.stat().st_mtime > f.stat().st_mtime
+    if not f.exists() or stale():
         with _icon_sem, _pkg_lock(pkg):
+            if stale():
+                f.unlink()
             if not f.exists():  # another thread may have finished while we waited for the lock
                 APK_CACHE.mkdir(exist_ok=True)
-                full = APK_CACHE / f"{pkg}-{vc}.apk"
-                if full.exists():  # detail already pulled it: parse locally, no transfer
+                if full.exists():  # an apk is already here: parse locally, no transfer (_icon rewrites the marker)
                     from androguard.core.apk import APK
                     _icon(APK(str(full)), pkg, vc)
                 elif not _icon_fast(serial, pkg, f):  # conventional name -> one tiny zip entry, no parse
-                    _icon_stream(serial, pkg, f)  # adaptive/obfuscated -> stream arsc, no full pull
-                    if not f.exists():
+                    # adaptive/obfuscated -> stream arsc, no full pull. "error" (transient) caches nothing: next call retries
+                    if _icon_stream(serial, pkg, f) != "error" and not f.exists():
                         f.write_bytes(b"")  # vector-only / no own raster icon: letter tile
     if not (f.exists() and f.stat().st_size):
-        raise LookupError("no raster icon")
+        raise ApiError(404, "no raster icon")
     data = f.read_bytes()
     return data, "image/webp" if data[:4] == b"RIFF" else "image/png"
 
@@ -833,13 +1006,13 @@ def start_activity(serial, pkg, activity=None, action=None, data=None, flags=Non
         if not re.fullmatch(r"[A-Za-z0-9_.]+", k):
             raise ValueError("bad extra key")
         cmd += ["--es", k, _shq(v)]
-    if comp:
-        cmd += ["-n", comp]
-    elif not action:
+    if not comp and not action:
         cmd += ["-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER"]
         comp = _launchers(serial).get(pkg)
-        if comp:
-            cmd += ["-n", comp]
+    if comp:
+        cmd += ["-n", _shq(comp)]  # quoted: inner-class names ('Outer$Inner') would lose '$Inner' to the device sh
+    else:  # action (e.g. VIEW deep link) without a component: resolve inside this app, not system-wide
+        cmd += ["-p", pkg]
     out = adb(*cmd, serial=serial, check=False, timeout=15)
     if "Error" in out or "Exception" in out:
         raise RuntimeError(out.strip().splitlines()[-1] if out.strip() else "am start failed")
@@ -852,12 +1025,17 @@ def app_manage(serial, pkg, action):
     if action == "enable":
         return {"msg": adb("shell", "pm", "enable", pkg, serial=serial)}
     if action == "disable":
-        return {"msg": adb("shell", "pm", "disable-user", "--user", "0", pkg, serial=serial, check=False)}
+        out = adb("shell", "pm", "disable-user", "--user", "0", pkg, serial=serial, check=False)
+        if "disabled" not in out or "Exception" in out or "Error" in out:
+            raise RuntimeError(_short_err(out, "pm disable-user failed"))
+        return {"msg": out}
     if action == "uninstall":
-        return {"msg": adb("uninstall", pkg, serial=serial, check=False)}
+        out = adb("uninstall", pkg, serial=serial, check=False)
+        if "Success" not in out:  # e.g. "Failure [DELETE_FAILED_INTERNAL_ERROR]" for system apps
+            raise RuntimeError(_short_err(out, "adb uninstall failed"))
+        return {"msg": out}
     if action == "backup":
-        dst, vn, vc = _pull_apk(serial, pkg)
-        return {"msg": f"saved {dst.name}", "path": str(dst)}
+        return apk_backup(serial, pkg)
     if action == "logcat":
         pid = adb("shell", "pidof", pkg, serial=serial, check=False).strip().split()
         if not pid:
@@ -872,10 +1050,13 @@ def make_shortcut(serial, pkg, activity, name):
         raise RuntimeError("shortcut export is Windows-only")
     if not re.fullmatch(r"[\w.\-]+:\d{1,5}|emulator-\d+", serial or ""):
         raise ValueError("bad serial")
-    comp = _comp(_pkg(pkg), activity) or f"{pkg}/"
+    comp = _comp(_pkg(pkg), activity) or _launchers(serial).get(pkg)
+    if not comp:
+        raise ValueError("no launcher activity; pick an activity")
     safe = re.sub(r'[\\/:*?"<>|]', "_", name or pkg).strip()[:60] or pkg
     adbexe = shutil.which("adb") or "adb"
-    args = f'/c ""{adbexe}" connect {serial} >nul 2>&1 & "{adbexe}" -s {serial} shell am start -n {comp}"'
+    # -n '{comp}': cmd.exe leaves single quotes alone, so the device sh keeps a '$' in inner-class names literal
+    args = f'/c ""{adbexe}" connect {serial} >nul 2>&1 & "{adbexe}" -s {serial} shell am start -n ' + f"'{comp}'" + '"'
     q = lambda v: "'" + str(v).replace("'", "''") + "'"  # PowerShell single-quoted literal (no backslash escaping)
     # Resolve the real Desktop in PS (it may be redirected to OneDrive), save there, print the path back.
     script = (f"$w=New-Object -ComObject WScript.Shell;$p=$w.SpecialFolders('Desktop')+'\\'+{q(safe + '.lnk')};"
@@ -939,18 +1120,36 @@ def update_pull():
     """Fast-forward pull. Fails cleanly if the tree has local changes that would be overwritten."""
     code, head = _git("rev-parse", "HEAD")
     if code != 0:
-        return {"ok": False, "error": "not a git clone"}
+        raise RuntimeError("not a git clone")
     code, out = _git("pull", "--ff-only", timeout=120)
     if code != 0:
-        return {"ok": False, "error": out or "git pull failed"}
+        raise RuntimeError(out or "git pull failed")
     _, new = _git("rev-parse", "HEAD")
     return {"ok": True, "output": out, "updated": head != new, "current": new[:7]}
+
+
+def _claude_desktop_config():
+    """Claude Desktop's config file. Windows: %APPDATA%\\Claude (current builds, MSIX included); the MSIX LocalCache
+    copy only when it exists and the %APPDATA% one doesn't (older MSIX builds)."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+    if sys.platform != "win32":
+        return os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
+    std = os.path.join(os.environ.get("APPDATA", ""), "Claude", "claude_desktop_config.json")
+    if not os.path.exists(std):
+        import glob
+        msix = glob.glob(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Packages", "Claude_*", "LocalCache",
+                                      "Roaming", "Claude", "claude_desktop_config.json"))
+        if msix:
+            return msix[0]
+    return std
 
 
 def mcp_info():
     """Real, copy-ready paths so the UI can build the exact MCP command / config for this machine."""
     return {"python": sys.executable or "python",
             "script": os.path.join(HERE, "mcp_server.py"),
+            "claudeDesktopConfig": _claude_desktop_config(),
             "repo": UPDATE_REPO}
 
 
@@ -960,7 +1159,11 @@ def frame_jpeg(serial, quality=70, width=0):
     from PIL import Image
     raw = adb("exec-out", "screencap", serial=serial, binary=True)
     w, h = int.from_bytes(raw[0:4], "little"), int.from_bytes(raw[4:8], "little")
-    im = Image.frombuffer("RGBA", (w, h), raw[len(raw) - w * h * 4:], "raw", "RGBA", 0, 1).convert("RGB")
+    mode = {1: "RGBA", 2: "RGBA", 5: "BGRA"}.get(int.from_bytes(raw[8:12], "little"))  # 1/2 = RGBA/RGBX_8888, 5 = BGRA_8888
+    if mode and w and h and len(raw) >= 12 + w * h * 4:
+        im = Image.frombuffer("RGBA", (w, h), raw[len(raw) - w * h * 4:], "raw", mode, 0, 1).convert("RGB")
+    else:  # RGB_565 or anything unknown: let the device encode a PNG (slower, but works everywhere)
+        im = Image.open(BytesIO(adb("exec-out", "screencap", "-p", serial=serial, binary=True))).convert("RGB")
     if width and im.width > width:  # thumbnails for the device picker
         im = im.resize((width, round(im.height * width / im.width)))
     buf = BytesIO()
@@ -968,10 +1171,11 @@ def frame_jpeg(serial, quality=70, width=0):
     return buf.getvalue()
 
 
-def tree_lxml(serial):
-    """Dump as lxml tree with <node> renamed to its class, so XPath like //android.widget.Button[@text='OK'] works."""
+def tree_lxml(serial, **dump_kw):
+    """Dump as lxml tree with <node> renamed to its class, so XPath like //android.widget.Button[@text='OK'] works.
+    dump_kw (tries, deadline) go to dump_xml."""
     from lxml import etree
-    root = etree.fromstring(dump_xml(serial))
+    root = etree.fromstring(dump_xml(serial, **dump_kw))
     for el in root.iter("node"):
         el.tag = el.get("class") or "node"
     return root
@@ -1014,21 +1218,32 @@ def _hide_kbd(serial):
 def act(serial, xpath, op="tap", timeout=10.0, dur=600):
     """op=tap/longtap/doubletap: wait until xpath appears, then tap / long-press / double-tap its center.
     op=wait: just wait for it. op=gone: wait until it disappears. op=check: look once, return {matches} (for if-conditions)."""
-    match = lambda: [e for e in tree_lxml(serial).xpath(xpath) if hasattr(e, "attrib")]
+    # One dump attempt per poll, capped by the step's deadline: act() already re-polls every 0.5s, so dump_xml's own
+    # 5 retries would only let a never-idle screen block one poll for a minute past the timeout.
+    match = lambda tries=1, deadline=None: [e for e in tree_lxml(serial, tries=tries, deadline=deadline).xpath(xpath)
+                                            if hasattr(e, "attrib")]
     if op == "check":
         try:
-            return {"matches": len(match())}
-        except Exception:  # dump failed (never-idle screen) -> treat as 0 for if-conditions
-            return {"matches": 0}
+            return {"matches": len(match(2, time.time() + 12))}
+        except Exception as e:  # dump failed (never-idle screen) -> 0 for if-conditions, but say why
+            return {"matches": 0, "error": str(e) or type(e).__name__}
+    from lxml import etree
+    try:  # a typo'd selector must fail now, not be retried as a "dump failure" until the timeout
+        etree.XPath(xpath)
+    except etree.XPathSyntaxError as e:
+        raise ValueError(f"invalid XPath: {xpath} ({e})") from None
     end = time.time() + timeout
-    dump_err = None
+    dump_err, read_ok = None, False
     while True:
         try:
-            els = match()
+            els = match(1, end)
+        except etree.XPathError:  # evaluation error (unknown function, ...): not a dump problem
+            raise
         except Exception as e:  # transient UI-dump failure (e.g. a WebView that keeps animating) — keep trying within the timeout instead of failing the whole step
             els = None
             dump_err = e
         if els is not None:
+            read_ok = True
             if op == "gone":
                 if not els:
                     return {"gone": True, "matches": 0}
@@ -1037,8 +1252,8 @@ def act(serial, xpath, op="tap", timeout=10.0, dur=600):
         if time.time() > end:
             if op == "gone":
                 raise RuntimeError(f"still present after {timeout:g}s: {xpath}")
-            if els is None and dump_err:
-                raise RuntimeError(f"screen wouldn't settle for a UI read after {timeout:g}s (often a WebView that keeps animating): {xpath}")
+            if not read_ok and dump_err:  # never got one readable dump (a later failed poll after a clean miss = not found)
+                raise RuntimeError(f"screen wouldn't settle for a UI read after {timeout:g}s (often a WebView that keeps animating): {xpath} ({dump_err})")
             raise RuntimeError(f"not found after {timeout:g}s: {xpath}")
         time.sleep(0.5)
     el = els[0]
@@ -1048,7 +1263,10 @@ def act(serial, xpath, op="tap", timeout=10.0, dur=600):
     # first, then re-locate (bounds can shift once it's gone).
     if op in ("tap", "longtap", "doubletap") and "EditText" not in (el.tag or "") and _hide_kbd(serial):
         time.sleep(0.2)
-        els2 = match()
+        try:
+            els2 = match(2, time.time() + 10)
+        except Exception:  # noqa: BLE001 - keep the bounds we already have
+            els2 = None
         if els2:
             el = els2[0]
     b = [int(x) for x in re.findall(r"\d+", el.get("bounds", ""))] or [0, 0, 0, 0]
@@ -1071,19 +1289,249 @@ def hierarchy(serial):
                                            "children": [node_to_dict(c) for c in root if c.tag == "node"]}}
 
 
+class ApiError(Exception):
+    """An error with its HTTP status (404 not found, 409 conflict, 400 missing param, ...)."""
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+class Q(dict):
+    """Query params: q["name"] on a missing param -> 400 "missing name" (q.get stays optional)."""
+    def __missing__(self, k):
+        raise ApiError(400, f"missing {k}")
+
+
+def _num(s):
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _size_bytes(v):
+    """'25G' / '512M' / '1.5K' / '1048576' (bytes) -> bytes (old toolbox df prints human sizes)."""
+    m = re.fullmatch(r"([\d.]+)([KMGT]?)B?", (v or "").strip(), re.I)
+    if not m:
+        return None
+    return int(float(m.group(1)) * 1024 ** "_KMGT".index(m.group(2).upper() or "_"))
+
+
+def device_info(serial):
+    """Model/Android/battery/screen/storage/RAM/IP/uptime. The shell reads run in parallel; unknown values -> None."""
+    cmds = {"prop": "getprop", "bat": "dumpsys battery", "size": "wm size", "dens": "wm density",
+            "df": "df -k /data", "mem": "cat /proc/meminfo", "ip": "ip -4 addr", "up": "cat /proc/uptime"}
+
+    def run(k):
+        if k == "prop":  # the one read that must work: an offline/unknown device fails the request
+            return adb("shell", cmds[k], serial=serial, timeout=8)
+        try:
+            return adb("shell", cmds[k], serial=serial, timeout=8, check=False)
+        except Exception:  # noqa: BLE001
+            return ""
+    with ThreadPoolExecutor(len(cmds)) as ex:
+        r = dict(zip(cmds, ex.map(run, cmds)))
+    prop = dict(re.findall(r"^\[([^\]]+)\]: \[(.*)\]\s*$", r["prop"], re.M))
+    if not prop:
+        raise RuntimeError(r["prop"] or "getprop returned nothing")
+    p = lambda k: prop.get(k) or None
+    kv = lambda txt, key: (re.search(rf"^\s*{key}:\s*(.+?)\s*$", txt, re.M | re.I) or [None, None])[1]
+    temp = _num(kv(r["bat"], "temperature"))
+    status = {1: "unknown", 2: "charging", 3: "discharging", 4: "not charging", 5: "full"}.get(_num(kv(r["bat"], "status")))
+    res = kv(r["size"], "Override size") or kv(r["size"], "Physical size")
+    dens = _num(kv(r["dens"], "Override density") or kv(r["dens"], "Physical density"))
+    storage = {"total": None, "free": None}
+    rows = [l.split() for l in r["df"].splitlines() if l.strip()]
+    if len(rows) >= 2 and len(rows[-1]) >= 4:
+        f = rows[-1]
+        if "1k-blocks" in " ".join(rows[0]).lower():  # toybox: Filesystem 1K-blocks Used Available Use% Mounted
+            storage = {"total": _num(f[1]) and _num(f[1]) * 1024, "free": _num(f[3]) and _num(f[3]) * 1024}
+        else:  # old toolbox: Filesystem Size Used Free Blksize
+            storage = {"total": _size_bytes(f[1]), "free": _size_bytes(f[3])}
+    mem = {k: _num(v) * 1024 for k, v in re.findall(r"^(\w+):\s+(\d+) kB", r["mem"], re.M)}
+    ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)/\d+.*?\s(\S+)\s*$", r["ip"], re.M)
+    ip = next((a for a, dev in ips if dev.startswith(("wlan", "eth"))), None) or next((a for a, _ in ips if not a.startswith("127.")), None)
+    up = re.match(r"([\d.]+)", r["up"].strip())
+    return {"serial": serial, "model": p("ro.product.model"), "brand": p("ro.product.brand"),
+            "manufacturer": p("ro.product.manufacturer"), "android": p("ro.build.version.release"),
+            "sdk": _num(p("ro.build.version.sdk")), "abi": p("ro.product.cpu.abi"),
+            "resolution": res, "density": dens,
+            "battery": {"level": _num(kv(r["bat"], "level")), "status": status,
+                        "temp": temp / 10 if temp is not None else None},
+            "ip": ip, "uptime": int(float(up.group(1))) if up else None, "storage": storage,
+            "ram": {"total": mem.get("MemTotal"), "free": mem.get("MemAvailable", mem.get("MemFree"))}}
+
+
+_LOG_RX = re.compile(r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\s+(\d+)\s+(\d+)\s+([VDIWEFS])\s+(.*?)\s*: ?(.*)$")
+
+
+def logcat(serial, n=400, pkg=None, level="V", grep=None):
+    """Recent logcat (threadtime) as rows. level = minimum priority (filtered by logcat itself); pkg (its pids) and
+    grep (case-insensitive substring on tag + msg) are applied here."""
+    n = max(50, min(3000, int(n)))
+    level = (level or "V").strip().upper()
+    if level not in ("V", "D", "I", "W", "E", "F"):
+        raise ValueError("level must be one of V D I W E F")
+    pids = None
+    if pkg:
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*", pkg):
+            raise ValueError("bad package name")
+        pids = [x for x in adb("shell", "pidof", pkg, serial=serial, check=False).split() if x.isdigit()]
+        if not pids:  # not running: nothing of its own to show
+            return {"lines": [], "pid": None}
+    grep = (grep or "").strip().lower()
+    # ponytail: `-t` counts lines before the level filter, and pkg/grep filter after it -> read a wider window
+    fetch = min(20000, n * 5) if (pids or grep or level != "V") else n
+    # `adb logcat` shell-escapes each arg itself (unlike `adb shell`), so *:W reaches logcat unglobbed as-is
+    out = adb("logcat", "-d", "-v", "threadtime", "-t", str(fetch), f"*:{level}", serial=serial, timeout=25)
+    rows = []
+    for line in out.splitlines():
+        m = _LOG_RX.match(line)
+        if not m:
+            if line.startswith("--------- beginning of") or not line.strip():
+                continue
+            row = {"time": None, "pid": None, "tid": None, "level": None, "tag": None, "msg": line}
+        else:
+            t, pid, tid, lv, tag, msg = m.groups()
+            row = {"time": t, "pid": pid, "tid": tid, "level": lv, "tag": tag, "msg": msg}
+        if pids and row["pid"] not in pids:
+            continue
+        if grep and grep not in f"{row['tag'] or ''} {row['msg']}".lower():
+            continue
+        rows.append(row)
+    return {"lines": rows[-n:], "pid": " ".join(pids) if pids else None}
+
+
+# ---- screen recording: `screenrecord` runs on the device under one background adb per serial ----
+REC_PATH = "/sdcard/inceptor_rec.mp4"
+_rec = {}  # serial -> {proc, t0, name, file, err}
+
+
+def screenrec_start(serial, secs=180):
+    secs = max(1, min(180, int(secs)))
+    with _key_lock(("rec", serial)):
+        r = _rec.get(serial)
+        if r and r["proc"].poll() is None:
+            raise ApiError(409, "already recording")
+        model = adb("shell", "getprop", "ro.product.model", serial=serial, timeout=6, check=False).strip()
+        name = re.sub(r"[^\w.\-]+", "_", model if model and "error" not in model.lower() else serial).strip("_") or "device"
+        p = subprocess.Popen(["adb", "-s", serial, "shell", "screenrecord", "--time-limit", str(secs), REC_PATH],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                             creationflags=NO_WINDOW)
+        try:  # an unsupported device / bad serial exits at once with the reason
+            out = p.communicate(timeout=0.8)[0]
+            if p.returncode != 0:
+                raise RuntimeError(out.decode(errors="replace").strip() or "screenrecord failed")
+        except subprocess.TimeoutExpired:
+            pass  # still running = recording
+        if r and r.get("file"):
+            Path(r["file"]).unlink(missing_ok=True)
+        _rec[serial] = {"proc": p, "t0": time.time(), "name": name, "file": None, "err": None}
+    return {"ok": True}
+
+
+def _rec_finish(serial, r=None):
+    """Pull the finished mp4 (the remote screenrecord has exited, so its moov atom is written) into a temp file."""
+    r = r or _rec[serial]
+    if r["file"]:
+        return
+    out = (r["proc"].communicate()[0] or b"").decode(errors="replace").strip()
+    dst = Path(tempfile.gettempdir()) / f"inceptor_rec_{re.sub(r'[^\w]+', '_', serial)}.mp4"
+    dst.unlink(missing_ok=True)
+    try:
+        adb("pull", REC_PATH, str(dst), serial=serial, timeout=120)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"recording not saved: {out or e}") from None
+    adb("shell", "rm", "-f", REC_PATH, serial=serial, check=False, timeout=8)
+    if not dst.exists() or not dst.stat().st_size:
+        raise RuntimeError("recording is empty" + (f": {out}" if out else ""))
+    r["file"] = str(dst)
+
+
+def screenrec_status(serial):
+    r = _rec.get(serial)
+    if not r:
+        return {"recording": False, "elapsed": None, "ready": False}
+    with _key_lock(("rec", serial)):
+        r = _rec.get(serial) or r  # a Start may have replaced the entry while we waited for the lock
+        running = r["proc"].poll() is None
+        if not running and not r["file"] and not r["err"]:  # time limit reached on its own: fetch it now
+            try:
+                _rec_finish(serial, r)
+            except Exception as e:  # noqa: BLE001
+                r["err"] = str(e)
+    return {"recording": running, "elapsed": round(time.time() - r["t0"], 1) if running else None,
+            "ready": bool(r["file"]), **({"error": r["err"]} if r["err"] else {})}
+
+
+def screenrec_stop(serial):
+    with _key_lock(("rec", serial)):
+        r = _rec.get(serial)
+        if not r:
+            raise ApiError(409, "not recording")
+        p = r["proc"]
+        if p.poll() is None:  # SIGINT lets screenrecord finalize the mp4 (a hard kill leaves it unplayable)
+            adb("shell", "pkill -INT screenrecord 2>/dev/null || kill -2 $(pidof screenrecord)",
+                serial=serial, check=False, timeout=8)
+            try:
+                p.wait(10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        if r["err"]:
+            raise RuntimeError(r["err"])
+        _rec_finish(serial)
+        return {"ok": True, "size": Path(r["file"]).stat().st_size}
+
+
+def screenrec_file(serial):
+    r = _rec.get(serial)
+    if not r or not r["file"] or not Path(r["file"]).is_file():
+        raise ApiError(404, "no recording")
+    name = re.sub(r"[^A-Za-z0-9.\-]+", "_", r["name"]).strip("_") or "device"  # header values are latin-1: keep it ASCII
+    fname = f"inceptor-{name}-{time.strftime('%Y%m%d-%H%M%S', time.localtime(r['t0']))}.mp4"
+    return Path(r["file"]).read_bytes(), fname
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         pass
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", cache="no-store", headers=None):
         if not isinstance(body, bytes):
             body = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    # Routes that change/destroy something also need the X-Inceptor header api() in app.js always sends: a cross-site
+    # <img>/link can't set it (old browsers send no Sec-Fetch-*/Origin), and a cross-origin fetch with it needs a
+    # preflight this server never answers. curl: add -H "X-Inceptor: 1".
+    GUARDED = {"/api/manage", "/api/emu/action", "/api/emu/create", "/api/emu/settings", "/api/emu/rename",
+               "/api/emu/clone", "/api/update/pull", "/api/logcat/clear", "/api/screenrec/start", "/api/screenrec/stop",
+               "/api/disconnect"}
+
+    def _trusted(self, path):
+        """CSRF / DNS-rebinding guard. Every route is a GET (uninstall, emulator delete, git pull, ...), so a request must
+        name this server by a loopback Host and, for /api/*, must not come from another site. Same-origin
+        fetch/<img>/MJPEG, a typed URL (Sec-Fetch-Site: none) and curl (no Sec-Fetch-*/Origin) pass; the static page
+        itself may be opened from a link anywhere."""
+        port = self.server.server_address[1]
+        hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+        if (self.headers.get("Host") or "").strip().lower() not in hosts:
+            return False
+        if not path.startswith("/api/"):
+            return True
+        if path in self.GUARDED and self.headers.get("X-Inceptor") != "1":
+            return False
+        if (self.headers.get("Sec-Fetch-Site") or "").strip().lower() in ("cross-site", "same-site"):
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or origin.strip().lower() in {"http://" + h for h in hosts}
 
     def handle_api(self, path, q):
         s = q.get("serial")
@@ -1103,20 +1551,33 @@ class H(BaseHTTPRequestHandler):
                 raise ValueError("addr must be host:port")
             return {"msg": adb("connect", addr, timeout=8), "devices": list_devices()}
         if path == "/api/disconnect":
-            return {"msg": adb("disconnect", q.get("addr", "")), "devices": list_devices()}
+            addr = q.get("addr", "").strip()  # an empty addr would make adb drop EVERY network device
+            if not re.fullmatch(r"[\w.\-]+:\d{1,5}", addr):
+                raise ValueError("addr must be host:port")
+            return {"msg": adb("disconnect", addr, check=False), "devices": list_devices()}
         if path == "/api/hierarchy":
             return hierarchy(s)
         if path == "/api/intent":
             return current_intent(s)
         if path == "/api/apps":
-            rows = list_apps(s, q.get("kind", "user"))
-            warm_icons(s, [r["package"] for r in rows])  # background, non-blocking; launchable sort first
-            warm_activities(s, [r["package"] for r in rows])  # pre-stream manifests for cross-app activity search
+            kind = q.get("kind", "user")
+            if kind not in ("user", "system", "all"):
+                raise ValueError("kind must be user, system or all")
+            rows = list_apps(s, kind)
+            _apps_cache[(s, kind)] = (time.time(), rows)
+            warm_icons(s, rows)  # background, non-blocking; launchable sort first
+            warm_activities(s, rows)  # pre-stream manifests for cross-app activity search
             return {"apps": rows}
         if path == "/api/searchact":
-            return {"groups": search_activities(s, q.get("q", ""), q.get("kind", "all"))}
+            kind = q.get("kind", "all")
+            if kind not in ("user", "system", "all"):
+                raise ValueError("kind must be user, system or all")
+            groups = search_activities(s, q.get("q", ""), kind)
+            return {"groups": [], "superseded": True} if groups is None else {"groups": groups}
         if path == "/api/app":
             return app_detail(s, q["pkg"])
+        if path == "/api/appacts":  # manifest-only activity list (no full apk pull): pickers, MCP
+            return app_acts(s, q["pkg"], q.get("labels") == "1")
         if path == "/api/applabels":
             pkgs = [p for p in q.get("pkgs", "").split(",") if re.fullmatch(r"[A-Za-z0-9_.]+", p)]
             with ThreadPoolExecutor(max(1, min(8, len(pkgs)))) as ex:
@@ -1130,9 +1591,14 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/act":
             return act(s, q["xpath"], q.get("op", "tap"), float(q.get("timeout", 10)), float(q.get("dur", 600)))
         if path == "/api/scroll":
-            m = re.search(r"(\d+)x(\d+)", adb("shell", "wm", "size", serial=s).splitlines()[-1])
+            d = q.get("dir", "down")
+            if d not in ("down", "up", "left", "right"):
+                raise ValueError("dir must be down, up, left or right")
+            m = re.search(r"(\d+)x(\d+)", adb("shell", "wm", "size", serial=s))
+            if not m:
+                raise RuntimeError("could not read the screen size (wm size)")
             w, h = int(m.group(1)), int(m.group(2))
-            dx, dy = {"down": (0, -h // 3), "up": (0, h // 3), "left": (w // 3, 0), "right": (-w // 3, 0)}[q.get("dir", "down")]
+            dx, dy = {"down": (0, -h // 3), "up": (0, h // 3), "left": (w // 3, 0), "right": (-w // 3, 0)}[d]
             adb("shell", "input", "swipe", *map(str, (w // 2 - dx // 2, h // 2 - dy // 2, w // 2 + dx // 2, h // 2 + dy // 2, 400)), serial=s)
             return {"ok": True}
         if path == "/api/tap":
@@ -1148,8 +1614,21 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/text":
             type_text(s, q.get("text", ""))
             return {"ok": True}
-        if path == "/api/emu/list":
-            return {"brands": emulators.list_all()}
+        if path == "/api/emu/list":  # supported = every brand we know, for an empty state that names them
+            return {"brands": emulators.list_all(), "supported": list(emulators.LABEL.values())}
+        if path == "/api/devinfo":
+            return device_info(q["serial"])
+        if path == "/api/logcat":
+            return logcat(q["serial"], q.get("n", 400), q.get("pkg") or None, q.get("level", "V"), q.get("grep"))
+        if path == "/api/logcat/clear":
+            adb("logcat", "-c", serial=q["serial"], timeout=10)
+            return {"ok": True}
+        if path == "/api/screenrec/start":
+            return screenrec_start(q["serial"], q.get("secs", 180))
+        if path == "/api/screenrec/status":
+            return screenrec_status(q["serial"])
+        if path == "/api/screenrec/stop":
+            return screenrec_stop(q["serial"])
         if path == "/api/emu/action":
             brand = q.get("brand", "")
             if brand not in emulators.LABEL:
@@ -1196,11 +1675,13 @@ class H(BaseHTTPRequestHandler):
             else:
                 msg = emulators.clone(brand, int(idx), name or None)
             return {"msg": msg, "brands": emulators.list_all()}
-        raise LookupError(path)
+        raise ApiError(404, "not found")
 
     def do_GET(self):
         u = urlparse(self.path)
-        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        q = Q({k: v[0] for k, v in parse_qs(u.query).items()})
+        if not self._trusted(u.path):
+            return self.send(403, {"error": "forbidden: request must come from this page on 127.0.0.1/localhost"})
         try:
             if u.path in ("/", "/index.html"):
                 return self.send(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
@@ -1217,26 +1698,43 @@ class H(BaseHTTPRequestHandler):
                 self.end_headers()
                 try:
                     while True:
+                        t0 = time.time()
                         jpg = frame_jpeg(q.get("serial"))
                         self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
                                          + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
                         self.wfile.flush()
+                        time.sleep(max(0.0, 0.12 - (time.time() - t0)))  # cap ~8 fps per open stream
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
-                except Exception:  # noqa: BLE001 - device gone etc.: end stream, client reconnects
+                except Exception:  # noqa: BLE001 - device gone etc.: close the multipart properly; the page reconnects
+                    try:
+                        self.wfile.write(b"--frame--\r\n")
+                        self.wfile.flush()
+                    except Exception:  # noqa: BLE001
+                        pass
                     return
-            if u.path == "/api/appicon":
-                data, ct = app_icon(q.get("serial"), q["pkg"])
-                return self.send(200, data, ct)
+            if u.path == "/api/appicon":  # &vc= keys the cache by version: no dumpsys, and the browser may cache it
+                vc = q.get("vc", "")
+                if vc and not vc.isdigit():
+                    raise ValueError("vc must be a number")
+                data, ct = app_icon(q.get("serial"), q["pkg"], int(vc) if vc else None)
+                return self.send(200, data, ct, "max-age=86400" if vc and int(vc) else "no-store")
+            if u.path == "/api/screenrec/file":
+                data, fname = screenrec_file(q["serial"])
+                return self.send(200, data, "video/mp4", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
             if u.path == "/api/thumb":
                 return self.send(200, frame_jpeg(q.get("serial"), 60, min(int(q.get("w", 160)), 480)), "image/jpeg")
             if u.path == "/api/screenshot":
                 return self.send(200, adb("exec-out", "screencap", "-p", serial=q.get("serial"), binary=True), "image/png")
             return self.send(200, self.handle_api(u.path, q))
-        except LookupError:
-            self.send(404, {"error": "not found"})
-        except Exception as e:  # noqa: BLE001
-            self.send(500, {"error": str(e)})
+        except ApiError as e:  # 400 missing param, 404, 409 ...
+            self.send(e.code, {"error": str(e)})
+        except ValueError as e:  # bad input
+            self.send(400, {"error": str(e) or "bad request"})
+        except subprocess.TimeoutExpired as e:
+            self.send(504, {"error": f"timed out after {e.timeout:g}s: {' '.join(map(str, e.cmd[-4:]))}"})
+        except Exception as e:  # noqa: BLE001 - adb/CLI failure etc.
+            self.send(500, {"error": str(e) or type(e).__name__})
 
 
 if __name__ == "__main__":
