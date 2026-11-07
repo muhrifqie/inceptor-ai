@@ -74,7 +74,8 @@ Inspect the UI tree, grab durable selectors, build no-code automation flows on a
 
 - 🔍 **UI inspector** — screenshot + live MJPEG stream (~5 fps), accessibility tree with element-kind badges, click an element for a graded selector (resource-id / text / desc / XPath), live XPath tester.
 - ⏺️ **Recorder** — record coordinate-free flows; export to uiautomator2 Python, MCP calls, or XPath.
-- 🧩 **Playground** — n8n-style free canvas: drag / pan / zoom nodes, auto-routed connectors, grab steps straight off the phone. Actions (tap, long-press, double-tap, type, key, swipe, scroll, open app, screenshot), waits (wait for / until gone / delay), logic (if / repeat / comment), and a **data loop** (`{{col}}` variables over rows). Exports to Python / MCP / JSON.
+- 🧩 **Playground** — n8n-style free canvas: drag / pan / zoom nodes, **auto-arrange** + restore-layout, auto-routed connectors, grab steps straight off the phone. Actions (tap, long-press, double-tap, type, key, swipe, scroll, open app, screenshot), waits (wait for / until gone / delay), logic (if / repeat / comment), and a **data loop** (`{{col}}` variables over rows, filled in the Data tab). The **Open app** step has a searchable **activity picker** (per-app list + cross-app search). A persistent **run log** shows each step ✓/✗ with the error and the XPath that failed. Copy as Python / MCP / JSON; **download always saves JSON** (flow + data) so saved & shared flows re-import cleanly.
+- 🔄 **Self-update** — on launch the UI checks GitHub and, when the repo is ahead, shows an **"update available"** banner with a one-click `git pull` (and a link to the diff).
 - 📦 **App & activity browser** — every package and **every** activity from the APK (androguard), exported/launcher flags, deep links, permissions; launch any activity, make a Windows `.lnk` shortcut, enable/disable/uninstall/backup.
 - 🧭 **Cross-app activity search** — type `add an account` and find `Settings · AddAccountSettings` across all apps, grouped by app, each openable (Shortcut-Maker style).
 - 🎛️ **Emulator Manager** — create / open / close / restart / delete / rename / clone across **MuMu, LDPlayer (9/14/4), MEmu, Nox, BlueStacks** via each vendor's CLI, with an **Android-version picker** on create and a **device-settings template** (CPU, RAM, resolution, manufacturer, model, IMEI, Android ID, MAC, phone number) for multi-account isolation.
@@ -157,7 +158,8 @@ Device settings usually need the instance **stopped**; restart it after applying
 
 - Emulators ship their own `adb` that can clash with platform-tools — stick to one `adb`.
 - Port clashes: BlueStacks binds `127.0.0.1:5555`; LDPlayer 9 binds `0.0.0.0:5555` (reachable via any non-loopback local IP — scan handles this). LDPlayer's `0.0.0.0` bind exposes ADB to the LAN with no auth — trusted networks only.
-- `uiautomator dump` fails on screens that never go idle (video, heavy animation) — fall back to `screenshot()` + coordinates.
+- `uiautomator dump` can fail on screens that never go idle (video, WebViews, heavy animation). The run engine now retries with back-off and keeps polling within each step's timeout instead of failing instantly; for truly never-idle screens, fall back to `screenshot()` + coordinates.
+- Taps auto-dismiss the soft keyboard first for non-text targets — the keyboard isn't in the UI dump, so bottom buttons (NEXT / Submit) could otherwise be tapped "through" it, causing flaky runs.
 - Automating real accounts on platforms (Google / Shopee / TikTok / WhatsApp) risks rate-limits and bans — pace actions like a human.
 
 ## 📄 License
