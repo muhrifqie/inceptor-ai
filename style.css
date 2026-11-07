@@ -672,3 +672,21 @@ kbd{font:11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;b
 .dft{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .dcsv summary{cursor:pointer;font-size:12.5px;color:var(--mut);font-weight:600}
 .dcsv textarea{width:100%;margin:8px 0;font:12px var(--mono);resize:vertical}
+/* MCP setup dialog */
+.mcpdlg{width:min(600px,94vw);max-height:86vh;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--card);color:var(--fg)}
+.mcpagents{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.mcpa{height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;font:inherit;font-weight:500;font-size:13px;transition:background .12s,border-color .12s}
+.mcpa:hover{border-color:var(--acc)}
+.mcpa.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.mcpstep{display:flex;gap:12px;margin-bottom:14px}
+.mcpn{flex:none;width:24px;height:24px;border-radius:50%;background:var(--acc-soft);color:var(--acc);display:grid;place-items:center;font-weight:700;font-size:12.5px;margin-top:1px}
+.mcpsb{flex:1;min-width:0}
+.mcpsb b{display:block;margin-bottom:6px;font-size:13.5px}
+.mcpsb p{margin:4px 0 0;font-size:12.5px;line-height:1.5}
+.mcppath{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;cursor:pointer}
+.mcppath code{font:12px var(--mono);color:var(--fg);background:var(--soft);padding:3px 7px;border-radius:6px;word-break:break-all}
+.mcppath .mut{font-size:11px}
+.mcpcode{margin:0;padding:12px;background:var(--soft);border:1px solid var(--line);border-radius:10px;font:12.5px/1.6 var(--mono);white-space:pre-wrap;word-break:break-all;cursor:pointer;transition:border-color .12s}
+.mcpcode:hover{border-color:var(--acc)}
+.mcpactions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.mcpnote{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.5}

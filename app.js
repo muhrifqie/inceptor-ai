@@ -69,6 +69,12 @@ const I18N = {
     welcome:"Mulai inspeksi UI Android", welcomeSub:"Lihat struktur layar aplikasi & dapatkan selector siap pakai dalam 3 langkah.",
     booting:"Memeriksa perangkat…", capturing:"Mengambil layar & struktur UI…", treeLoading:"Memuat struktur UI…",
     playground:"Playground", pgHint:"Susun alur otomasi langkah demi langkah (seperti n8n)", pgZoomHint:"Perbesar / perkecil / paskan", pgRewire:"Tarik ke node lain untuk menyambung (atas/bawah)", pgInsert:"Sisipkan langkah di sini", pgReroute:"Tarik ujung garis ke node lain", pgRefresh:"Ambil ulang layar", pgNoDev:"Pilih perangkat untuk melihat layarnya di sini", pgTitle:"Alur Otomasi",
+    mcpHint:"Hubungkan ke AI agent (MCP) — setup 1 klik", mcpT:"Hubungkan ke AI agent", mcpSub:"Daftarkan server MCP Inceptor ke AI agent-mu. Pilih agent, salin, selesai — AI-nya yang beresin sisanya.",
+    mcpStepCmd:"Jalankan perintah ini (klik untuk salin):", mcpStepJson:"Tambahkan ini ke file config agent-mu:", mcpStepToml:"Tambahkan ini ke file config agent-mu:", mcpClickCopy:"klik untuk salin",
+    mcpStep2:"Restart agent", mcpStep2d:"Buka ulang {agent} biar tools Inceptor kebaca. Cek: minta agent \"list MCP tools\" — harus muncul android-inceptor.", mcpCopyCmd:"Salin perintah", mcpCopyConf:"Salin config", mcpAsk:"Suruh AI setup-in",
+    mcpAskCmd:"Tolong daftarkan MCP server \"android-inceptor\" untuk saya dengan menjalankan perintah ini di terminal, lalu konfirmasi kalau sudah berhasil:\n{cmd}",
+    mcpAskFile:"Tolong tambahkan MCP server \"android-inceptor\" ke config {agent} saya (file: {path}). Buat file-nya kalau belum ada, gabungkan jangan timpa isi yang sudah ada, lalu kasih tahu kalau perlu restart:\n{code}",
+    mcpNote:"Syarat: server ini tetap jalan (python server.py) + adb ada di PATH. Dapat 20 tools: devices, ui_tree, tap, swipe, start_activity, emulator, dst.",
     emuMgr:"Emulator", emuHint:"Kelola emulator: buka, tutup, restart, buat, hapus", emuDesc:"Semua emulator yang terpasang di PC ini. Kontrol lewat CLI resmi tiap merek.", emuRefresh:"Segarkan", emuLaunch:"Buka", emuStop:"Tutup", emuRestart:"Restart", emuDelete:"Hapus", emuCreate:"Buat instance", emuRunning:"jalan", emuStopped:"mati", emuNoInst:"Belum ada instance", emuNoCreate:"Buat/hapus instance lewat Multi-Instance Manager (nggak ada CLI-nya)", emuConfirmDel:"Hapus instance \"{name}\"? Nggak bisa dibalikin. Klik Hapus sekali lagi.", emuNamePh:"Nama (opsional)", emuBusy:"Memproses…", emuDone:"Beres: {msg}",
     emuConfig:"Setting device", emuRename:"Ubah nama", emuClone:"Duplikat", emuTpl:"Template", emuTplSave:"Simpan", emuTplNew:"— template baru —", emuTplNone:"Belum ada template", emuApply:"Terapkan ke device ini", emuCfgTitle:"Setting · {name}", emuCfgCaps:"Didukung: {caps}", emuCfgNone:"Merek ini tidak bisa diatur via CLI", emuTplNamePrompt:"Nama template:", emuRenamePrompt:"Nama baru:", emuClonePrompt:"Nama instance baru (opsional):", emuCfgApplied:"Setting diterapkan — restart instance biar efektif", emuTplSaved:"Template \"{name}\" disimpan", emuTplDeleted:"Template dihapus", emuPickTpl:"Pilih dulu template yang mau dihapus", emuAndroidVer:"Versi Android",
     fCpu:"CPU (core)", fMemory:"RAM (MB)", fWidth:"Lebar", fHeight:"Tinggi", fDpi:"DPI", fManufacturer:"Manufacturer", fModel:"Model", fImei:"IMEI", fAndroidid:"Android ID", fMac:"MAC", fPhonenumber:"No. HP", fAutoHint:"isi \"auto\" buat acak",
@@ -159,6 +165,12 @@ const I18N = {
     welcome:"Start inspecting Android UI", welcomeSub:"See an app's screen structure & get ready-to-use selectors in 3 steps.",
     booting:"Checking devices…", capturing:"Grabbing screen & UI tree…", treeLoading:"Loading UI tree…",
     playground:"Playground", pgHint:"Build an automation flow step by step (n8n-style)", pgZoomHint:"Zoom out / fit / in", pgRewire:"Drag onto another node to connect (top/bottom)", pgInsert:"Insert a step here", pgReroute:"Drag the line end to another node", pgRefresh:"Recapture screen", pgNoDev:"Pick a device to mirror its screen here", pgTitle:"Automation Flow",
+    mcpHint:"Connect to an AI agent (MCP) — 1-click setup", mcpT:"Connect to an AI agent", mcpSub:"Register Inceptor's MCP server with your AI agent. Pick an agent, copy, done — let the AI handle the rest.",
+    mcpStepCmd:"Run this command (click to copy):", mcpStepJson:"Add this to your agent's config file:", mcpStepToml:"Add this to your agent's config file:", mcpClickCopy:"click to copy",
+    mcpStep2:"Restart the agent", mcpStep2d:"Reopen {agent} so the Inceptor tools load. Check: ask the agent to \"list MCP tools\" — android-inceptor should appear.", mcpCopyCmd:"Copy command", mcpCopyConf:"Copy config", mcpAsk:"Let the AI set it up",
+    mcpAskCmd:"Please register the \"android-inceptor\" MCP server for me by running this in the terminal, then confirm it worked:\n{cmd}",
+    mcpAskFile:"Please add the \"android-inceptor\" MCP server to my {agent} config (file: {path}). Create the file if missing, merge don't overwrite existing content, then tell me if a restart is needed:\n{code}",
+    mcpNote:"Requires this server running (python server.py) + adb on PATH. You get 20 tools: devices, ui_tree, tap, swipe, start_activity, emulator, and more.",
     emuMgr:"Emulators", emuHint:"Manage emulators: open, close, restart, create, delete", emuDesc:"Every emulator installed on this PC. Controlled through each brand's official CLI.", emuRefresh:"Refresh", emuLaunch:"Open", emuStop:"Close", emuRestart:"Restart", emuDelete:"Delete", emuCreate:"Create instance", emuRunning:"running", emuStopped:"stopped", emuNoInst:"No instances yet", emuNoCreate:"Create/delete instances via the Multi-Instance Manager (no CLI)", emuConfirmDel:"Delete instance \"{name}\"? This can't be undone. Click Delete again.", emuNamePh:"Name (optional)", emuBusy:"Working…", emuDone:"Done: {msg}",
     emuConfig:"Device settings", emuRename:"Rename", emuClone:"Clone", emuTpl:"Template", emuTplSave:"Save", emuTplNew:"— new template —", emuTplNone:"No templates yet", emuApply:"Apply to this device", emuCfgTitle:"Settings · {name}", emuCfgCaps:"Supported: {caps}", emuCfgNone:"This brand can't be configured via CLI", emuTplNamePrompt:"Template name:", emuRenamePrompt:"New name:", emuClonePrompt:"New instance name (optional):", emuCfgApplied:"Settings applied — restart the instance to take effect", emuTplSaved:"Template \"{name}\" saved", emuTplDeleted:"Template deleted", emuPickTpl:"Pick a template to delete first", emuAndroidVer:"Android version",
     fCpu:"CPU (cores)", fMemory:"RAM (MB)", fWidth:"Width", fHeight:"Height", fDpi:"DPI", fManufacturer:"Manufacturer", fModel:"Model", fImei:"IMEI", fAndroidid:"Android ID", fMac:"MAC", fPhonenumber:"Phone no.", fAutoHint:'use "auto" to randomize',
@@ -1358,6 +1370,58 @@ $("#emuBody").onclick = async e => {
 };
 $("#emuRefresh").onclick = emuLoad;
 $("#btnEmu").onclick = () => { $("#dlgEmu").showModal(); emuLoad(); };
+
+// ---------- MCP setup (connect to an AI agent) ----------
+const MCP_AGENTS = [
+  {id:"claudecode", name:"Claude Code"}, {id:"claudedesktop", name:"Claude Desktop"},
+  {id:"cursor", name:"Cursor"}, {id:"windsurf", name:"Windsurf"},
+  {id:"vscode", name:"VS Code"}, {id:"codex", name:"Codex CLI"}, {id:"other", name:"Other / JSON"},
+];
+let mcpInfo = null, mcpSel = "claudecode";
+function mcpConf(id){
+  const P = mcpInfo.python, S = mcpInfo.script;
+  const j = (key, vsc) => JSON.stringify({[key]:{"android-inceptor": vsc ? {type:"stdio",command:P,args:[S]} : {command:P,args:[S]}}}, null, 2);
+  switch(id){
+    case "claudecode":    return {kind:"cmd",  code:`claude mcp add -s user android-inceptor -- "${P}" "${S}"`, path:null};
+    case "claudedesktop": return {kind:"json", code:j("mcpServers"),       path:"%APPDATA%\\Claude\\claude_desktop_config.json"};
+    case "cursor":        return {kind:"json", code:j("mcpServers"),       path:"~\\.cursor\\mcp.json  (atau .cursor\\mcp.json di root project)"};
+    case "windsurf":      return {kind:"json", code:j("mcpServers"),       path:"~\\.codeium\\windsurf\\mcp_config.json"};
+    case "vscode":        return {kind:"json", code:j("servers", true),    path:".vscode\\mcp.json  (di root project)"};
+    case "codex":         return {kind:"toml", code:`[mcp_servers.android-inceptor]\ncommand = ${JSON.stringify(P)}\nargs = [${JSON.stringify(S)}]`, path:"~\\.codex\\config.toml"};
+    default:              return {kind:"json", code:j("mcpServers"),       path:null};
+  }
+}
+function mcpAgentsBar(){
+  $("#mcpAgents").innerHTML = MCP_AGENTS.map(a => `<button class="mcpa${a.id===mcpSel?" on":""}" data-a="${a.id}">${esc(a.name)}</button>`).join("");
+  $("#mcpAgents").querySelectorAll("[data-a]").forEach(b => b.onclick = () => { mcpSel = b.dataset.a; mcpAgentsBar(); mcpRender(); });
+}
+function mcpRender(){
+  const a = MCP_AGENTS.find(x => x.id === mcpSel), c = mcpConf(mcpSel);
+  const step1 = {cmd:t("mcpStepCmd"), json:t("mcpStepJson"), toml:t("mcpStepToml")}[c.kind];
+  const prompt = c.kind === "cmd" ? t("mcpAskCmd",{cmd:c.code})
+                                  : t("mcpAskFile",{agent:a.name, path:(c.path||a.name), code:c.code});
+  let h = `<div class="mcpstep"><span class="mcpn">1</span><div class="mcpsb"><b>${esc(step1)}</b>`;
+  if (c.path) h += `<div class="mcppath" data-cp="${esc(c.path)}"><code>${esc(c.path)}</code><span class="mut">${t("mcpClickCopy")}</span></div>`;
+  h += `<pre class="mcpcode" data-cp="${esc(c.code)}" title="${t("mcpClickCopy")}">${esc(c.code)}</pre></div></div>`;
+  h += `<div class="mcpstep"><span class="mcpn">2</span><div class="mcpsb"><b>${t("mcpStep2")}</b><p class="mut">${t("mcpStep2d",{agent:esc(a.name)})}</p></div></div>`;
+  h += `<div class="mcpactions"><button class="btn pri sm" id="mcpCopyMain"><svg class="ic" data-ic="copy"></svg>${c.kind==="cmd"?t("mcpCopyCmd"):t("mcpCopyConf")}</button>`;
+  h += `<button class="btn sm" id="mcpAsk"><svg class="ic" data-ic="bot"></svg>${t("mcpAsk")}</button></div>`;
+  h += `<p class="mcpnote mut">${t("mcpNote")}</p>`;
+  $("#mcpBody").innerHTML = h; paintIcons($("#mcpBody"));
+  $("#mcpBody").querySelectorAll("[data-cp]").forEach(e => e.onclick = () => copy(e.dataset.cp));
+  $("#mcpCopyMain").onclick = () => copy(c.code);
+  $("#mcpAsk").onclick = () => copy(prompt);
+}
+async function mcpOpen(){
+  $("#dlgMcp").showModal();
+  if (!mcpInfo){
+    $("#mcpBody").innerHTML = `<div class="emuload"><i class="spin"></i></div>`;
+    try { mcpInfo = await api("/api/mcpinfo"); }
+    catch(e){ mcpInfo = {python:"python", script:"mcp_server.py", repo:""}; }
+  }
+  mcpAgentsBar(); mcpRender();
+}
+$("#btnMcp").onclick = mcpOpen;
 
 // ---------- device settings template ----------
 const EMU_FIELDS = ["cpu","memory","width","height","dpi","manufacturer","model","imei","androidid","mac","phonenumber"];

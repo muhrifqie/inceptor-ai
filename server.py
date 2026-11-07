@@ -947,6 +947,13 @@ def update_pull():
     return {"ok": True, "output": out, "updated": head != new, "current": new[:7]}
 
 
+def mcp_info():
+    """Real, copy-ready paths so the UI can build the exact MCP command / config for this machine."""
+    return {"python": sys.executable or "python",
+            "script": os.path.join(HERE, "mcp_server.py"),
+            "repo": UPDATE_REPO}
+
+
 def frame_jpeg(serial, quality=70, width=0):
     """Raw screencap (no on-device PNG encode, ~0.2s) -> JPEG. Header is 12 bytes (old) or 16 (Android 12+: + colorspace)."""
     from io import BytesIO
@@ -1084,6 +1091,8 @@ class H(BaseHTTPRequestHandler):
             return update_check()
         if path == "/api/update/pull":
             return update_pull()
+        if path == "/api/mcpinfo":
+            return mcp_info()
         if path == "/api/devices":
             return list_devices()
         if path == "/api/scan":

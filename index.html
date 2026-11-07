@@ -33,6 +33,7 @@
   </details>
   <button class="btn" id="btnPlay" data-i18n-title="pgHint"><svg class="ic" data-ic="flow"></svg><span data-i18n="playground"></span></button>
   <button class="btn" id="btnEmu" data-i18n-title="emuHint"><svg class="ic" data-ic="grid"></svg><span data-i18n="emuMgr"></span></button>
+  <button class="btn" id="btnMcp" data-i18n-title="mcpHint"><svg class="ic" data-ic="bot"></svg><span>MCP</span></button>
   <span class="sp"></span>
   <div class="seg" id="langSeg"><button data-lang="id">ID</button><button data-lang="en">EN</button></div>
   <button class="btn ghost icon" id="btnTheme" data-i18n-title="theme"><svg class="ic" data-ic="moon"></svg></button>
@@ -247,6 +248,12 @@
   <div class="cfggrid" id="cfgGrid"></div>
   <div class="cfgfoot"><span class="mut" id="cfgCaps"></span><span class="sp"></span>
     <button class="btn pri" id="cfgApply"><svg class="ic" data-ic="check"></svg><span data-i18n="emuApply"></span></button></div>
+</dialog>
+<dialog id="dlgMcp" class="mcpdlg">
+  <div class="ddlghd"><h3><svg class="ic" data-ic="bot"></svg> <span data-i18n="mcpT"></span></h3><span class="sp"></span><form method="dialog"><button class="btn sm ghost">✕</button></form></div>
+  <p class="mut" data-i18n="mcpSub" style="margin:2px 0 14px;font-size:12.5px"></p>
+  <div class="mcpagents" id="mcpAgents"></div>
+  <div class="mcpbody" id="mcpBody"></div>
 </dialog>
 <div id="toast"></div>
 
