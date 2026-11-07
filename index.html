@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="updBar" class="updbar" hidden></div>
 <header>
   <div class="logo" data-i18n-title="tagline"><i><svg class="ic" data-ic="spark"></svg></i>Inceptor<b class="ai">AI</b></div>
   <div class="devbox" id="devBox" data-i18n-title="deviceHint">
@@ -166,16 +167,19 @@
       </div>
       <div class="pgtools">
         <button class="btn sm" id="pgDataBtn" data-i18n-title="pgDataHint"><svg class="ic" data-ic="table"></svg><span data-i18n="pgData"></span> <span class="cnt"></span></button>
+        <button class="btn ghost sm icon" id="pgArrange" data-i18n-title="pgArrange"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="5" rx="1.5"/><rect x="6" y="16" width="12" height="5" rx="1.5"/><path d="M12 8v8"/></svg></button>
+        <button class="btn ghost sm icon" id="pgUndo" data-i18n-title="pgUndo"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-3"/></svg></button>
         <span class="sp"></span>
         <div class="seg sm" id="pgFmt"><button data-f="py" class="on">Py</button><button data-f="mcp">MCP</button><button data-f="json">JSON</button></div>
         <span class="sp"></span>
         <button class="btn ghost sm icon" id="pgCopy" data-i18n-title="pgCopy"><svg class="ic" data-ic="copy"></svg></button>
-        <button class="btn ghost sm icon" id="pgDl" title="Download"><svg class="ic" data-ic="download"></svg></button>
+        <button class="btn ghost sm icon" id="pgDl" data-i18n-title="pgDlFlow"><svg class="ic" data-ic="download"></svg></button>
         <button class="btn ghost sm icon" id="pgImport" data-i18n-title="pgImport"><svg class="ic" data-ic="upload"></svg></button>
         <button class="btn ghost sm icon" id="pgClear" title="Clear"><svg class="ic" data-ic="trash"></svg></button>
       </div>
       <div class="scroll"><div class="pgflow" id="pgFlow"></div></div>
       <details class="pgcodewrap"><summary><span data-i18n="pgPreview"></span></summary><pre class="pgcode" id="pgCode"></pre></details>
+      <details class="pgcodewrap" id="pgLogWrap"><summary><span data-i18n="pgRunLog"></span> <small id="pgLogCnt" class="mut"></small><button class="x" id="pgLogClear" data-i18n-title="pgLogClear">×</button></summary><div class="pglog"><div id="pgLogBody"></div></div></details>
       <input type="file" id="pgFile" accept="application/json,.json" hidden>
     </div>
   </section>

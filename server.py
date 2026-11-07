@@ -193,11 +193,12 @@ def node_to_dict(el):
 def dump_xml(serial):
     path = "/sdcard/window_dump.xml"
     last = ""
-    for _ in range(3):  # dump fails sometimes on animated screens ("could not get idle state")
+    for i in range(5):  # dump fails on animated / never-idle screens ("could not get idle state"); back off so a brief settle window is caught
         last = adb("shell", "uiautomator", "dump", path, serial=serial, timeout=30, check=False)
         if "dumped to" in last.lower():
             return adb("exec-out", "cat", path, serial=serial, binary=True)
-    raise RuntimeError(last)
+        time.sleep(0.4 + 0.25 * i)
+    raise RuntimeError((last or "").strip() or "uiautomator dump failed")
 
 
 def current_activity(serial):
@@ -888,6 +889,61 @@ def make_shortcut(serial, pkg, activity, name):
     return {"path": r.stdout.strip()}
 
 
+UPDATE_REPO = "muhrifqie/inceptor-ai"  # source repo for the self-update check
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _git(*args, timeout=30):
+    """Run git inside this project's folder. Returns (returncode, combined output)."""
+    r = subprocess.run(["git", "-C", HERE, *args], capture_output=True, text=True, timeout=timeout, creationflags=NO_WINDOW)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def _gh(path, timeout=12):
+    import urllib.request
+    req = urllib.request.Request("https://api.github.com/repos/" + UPDATE_REPO + path,
+                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "inceptor-ai"})
+    return json.load(urllib.request.urlopen(req, timeout=timeout))
+
+
+def update_check():
+    """Compare the local git HEAD with the latest commit on GitHub. No git clone -> not supported (ZIP download)."""
+    code, head = _git("rev-parse", "HEAD")
+    if code != 0:
+        return {"git": False, "available": False, "msg": "not a git clone (download the repo with `git clone` to get updates)"}
+    code, branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    branch = branch if code == 0 and branch and branch != "HEAD" else "main"
+    try:
+        latest = _gh("/commits/" + branch)["sha"]
+    except Exception as e:  # noqa: BLE001 - offline / rate-limited / repo moved
+        return {"git": True, "available": False, "error": "update check failed: " + str(e)}
+    if latest == head:
+        return {"git": True, "available": False, "current": head[:7], "latest": latest[:7], "branch": branch}
+    behind, msgs = None, []
+    try:  # how many commits ahead the remote is, + their subject lines
+        cmp = _gh("/compare/" + head + "..." + latest)
+        behind = cmp.get("ahead_by")
+        msgs = [c["commit"]["message"].split("\n", 1)[0] for c in cmp.get("commits", [])][-12:]
+    except Exception:  # noqa: BLE001 - local HEAD not on remote (local commits) -> compare 404s; still offer the pull
+        pass
+    code, dirty = _git("status", "--porcelain")
+    return {"git": True, "available": True, "current": head[:7], "latest": latest[:7], "branch": branch,
+            "behind": behind, "messages": msgs, "dirty": bool(dirty.strip()),
+            "url": "https://github.com/" + UPDATE_REPO + "/compare/" + head[:7] + "..." + branch}
+
+
+def update_pull():
+    """Fast-forward pull. Fails cleanly if the tree has local changes that would be overwritten."""
+    code, head = _git("rev-parse", "HEAD")
+    if code != 0:
+        return {"ok": False, "error": "not a git clone"}
+    code, out = _git("pull", "--ff-only", timeout=120)
+    if code != 0:
+        return {"ok": False, "error": out or "git pull failed"}
+    _, new = _git("rev-parse", "HEAD")
+    return {"ok": True, "output": out, "updated": head != new, "current": new[:7]}
+
+
 def frame_jpeg(serial, quality=70, width=0):
     """Raw screencap (no on-device PNG encode, ~0.2s) -> JPEG. Header is 12 bytes (old) or 16 (Android 12+: + colorspace)."""
     from io import BytesIO
@@ -924,26 +980,68 @@ def type_text(serial, text):
             adb("shell", "input", "text", "'" + t.replace("'", "'\\''") + "'", serial=serial)  # quoted for the device shell
 
 
+def _kbd_shown(serial):
+    """True if the soft keyboard (IME) is on screen. It never appears in the UI dump, so we probe dumpsys."""
+    try:
+        return "mInputShown=true" in adb("shell", "dumpsys", "input_method", serial=serial)
+    except Exception:
+        return False
+
+
+def _hide_kbd(serial):
+    """Dismiss the soft keyboard if it's shown. ESCAPE first (never navigates); BACK only as a fallback —
+    when the keyboard is up, BACK just hides it (Android eats it before any navigation). Returns True if it was shown."""
+    if not _kbd_shown(serial):
+        return False
+    adb("shell", "input", "keyevent", "111", serial=serial)  # KEYCODE_ESCAPE
+    time.sleep(0.2)
+    if _kbd_shown(serial):
+        adb("shell", "input", "keyevent", "4", serial=serial)  # KEYCODE_BACK
+        time.sleep(0.2)
+    return True
+
+
 def act(serial, xpath, op="tap", timeout=10.0, dur=600):
     """op=tap/longtap/doubletap: wait until xpath appears, then tap / long-press / double-tap its center.
     op=wait: just wait for it. op=gone: wait until it disappears. op=check: look once, return {matches} (for if-conditions)."""
     match = lambda: [e for e in tree_lxml(serial).xpath(xpath) if hasattr(e, "attrib")]
     if op == "check":
-        return {"matches": len(match())}
+        try:
+            return {"matches": len(match())}
+        except Exception:  # dump failed (never-idle screen) -> treat as 0 for if-conditions
+            return {"matches": 0}
     end = time.time() + timeout
+    dump_err = None
     while True:
-        els = match()
-        if op == "gone":
-            if not els:
-                return {"gone": True, "matches": 0}
-        elif els:
-            break
+        try:
+            els = match()
+        except Exception as e:  # transient UI-dump failure (e.g. a WebView that keeps animating) — keep trying within the timeout instead of failing the whole step
+            els = None
+            dump_err = e
+        if els is not None:
+            if op == "gone":
+                if not els:
+                    return {"gone": True, "matches": 0}
+            elif els:
+                break
         if time.time() > end:
             if op == "gone":
                 raise RuntimeError(f"still present after {timeout:g}s: {xpath}")
+            if els is None and dump_err:
+                raise RuntimeError(f"screen wouldn't settle for a UI read after {timeout:g}s (often a WebView that keeps animating): {xpath}")
             raise RuntimeError(f"not found after {timeout:g}s: {xpath}")
         time.sleep(0.5)
-    b = [int(x) for x in re.findall(r"\d+", els[0].get("bounds", ""))] or [0, 0, 0, 0]
+    el = els[0]
+    # The soft keyboard isn't in the UI dump, so an element the dump places near the screen bottom can be
+    # physically covered by the IME -> `input tap` lands on a key instead of the target. This is the usual cause
+    # of flaky taps on NEXT/Submit/footer buttons right after typing. For non-text targets, hide the keyboard
+    # first, then re-locate (bounds can shift once it's gone).
+    if op in ("tap", "longtap", "doubletap") and "EditText" not in (el.tag or "") and _hide_kbd(serial):
+        time.sleep(0.2)
+        els2 = match()
+        if els2:
+            el = els2[0]
+    b = [int(x) for x in re.findall(r"\d+", el.get("bounds", ""))] or [0, 0, 0, 0]
     x, y = (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
     if op == "tap":
         adb("shell", "input", "tap", str(x), str(y), serial=serial)
@@ -979,6 +1077,10 @@ class H(BaseHTTPRequestHandler):
 
     def handle_api(self, path, q):
         s = q.get("serial")
+        if path == "/api/update/check":
+            return update_check()
+        if path == "/api/update/pull":
+            return update_pull()
         if path == "/api/devices":
             return list_devices()
         if path == "/api/scan":

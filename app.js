@@ -72,8 +72,8 @@ const I18N = {
     emuMgr:"Emulator", emuHint:"Kelola emulator: buka, tutup, restart, buat, hapus", emuDesc:"Semua emulator yang terpasang di PC ini. Kontrol lewat CLI resmi tiap merek.", emuRefresh:"Segarkan", emuLaunch:"Buka", emuStop:"Tutup", emuRestart:"Restart", emuDelete:"Hapus", emuCreate:"Buat instance", emuRunning:"jalan", emuStopped:"mati", emuNoInst:"Belum ada instance", emuNoCreate:"Buat/hapus instance lewat Multi-Instance Manager (nggak ada CLI-nya)", emuConfirmDel:"Hapus instance \"{name}\"? Nggak bisa dibalikin. Klik Hapus sekali lagi.", emuNamePh:"Nama (opsional)", emuBusy:"Memproses…", emuDone:"Beres: {msg}",
     emuConfig:"Setting device", emuRename:"Ubah nama", emuClone:"Duplikat", emuTpl:"Template", emuTplSave:"Simpan", emuTplNew:"— template baru —", emuTplNone:"Belum ada template", emuApply:"Terapkan ke device ini", emuCfgTitle:"Setting · {name}", emuCfgCaps:"Didukung: {caps}", emuCfgNone:"Merek ini tidak bisa diatur via CLI", emuTplNamePrompt:"Nama template:", emuRenamePrompt:"Nama baru:", emuClonePrompt:"Nama instance baru (opsional):", emuCfgApplied:"Setting diterapkan — restart instance biar efektif", emuTplSaved:"Template \"{name}\" disimpan", emuTplDeleted:"Template dihapus", emuPickTpl:"Pilih dulu template yang mau dihapus", emuAndroidVer:"Versi Android",
     fCpu:"CPU (core)", fMemory:"RAM (MB)", fWidth:"Lebar", fHeight:"Tinggi", fDpi:"DPI", fManufacturer:"Manufacturer", fModel:"Model", fImei:"IMEI", fAndroidid:"Android ID", fMac:"MAC", fPhonenumber:"No. HP", fAutoHint:"isi \"auto\" buat acak",
-    pgRun:"Jalankan", pgStop:"Hentikan", pgStopping:"Menghentikan…", pgDone:"Alur selesai", pgFailAt:"Gagal di {t}",
-    pgCopy:"Salin", pgImport:"Impor", pgImported:"Alur diimpor", pgPreview:"Pratinjau kode", pgEmpty:"(alur kosong)",
+    pgRun:"Jalankan", pgStop:"Hentikan", pgStopping:"Dihentikan", pgDone:"Alur selesai", pgFailAt:"Gagal di {t}", pgRunLog:"Log jalan", pgLogEmpty:"Belum ada run — klik Jalankan; kalau gagal, step, error, & XPath-nya muncul di sini.", pgLogClear:"Bersihkan log", pgLogStart:"Mulai jalan", updAvail:"Update tersedia", updN:"Update tersedia · {n} commit", updBtn:"Update sekarang", updView:"Lihat perubahan", updDismiss:"Tutup", updPulling:"Mengupdate…", updDone:"Terupdate ke {v} — restart server buat pakai", updFail:"Update gagal", updDirty:"Ada perubahan lokal yang belum di-commit. Pull bisa gagal/menimpa. Lanjut?",
+    pgCopy:"Salin", pgImport:"Impor", pgImported:"Alur diimpor", pgImportBad:"Cuma file JSON yang bisa diimpor — export sebagai JSON dulu (Py/MCP itu kode buat dijalanin, bukan buat re-import).", pgDlFlow:"Unduh flow (.json — lengkap + data, bisa di-import balik)", pgDownloaded:"Flow diunduh (.json)", pgPreview:"Pratinjau kode", pgEmpty:"(alur kosong)",
     pgData:"Data", pgDataHint:"Jalankan alur untuk tiap baris data (variabel {{kolom}})", pgDataT:"Data loop (variabel)",
     pgDataDesc:"Alur dijalankan sekali untuk tiap baris. Pakai {{nama_kolom}} di teks, selector, atau package — nanti diganti nilai baris.",
     pgCol:"Kolom", pgRow2:"Baris", pgVars:"Variabel", pgNoVars:"Belum ada kolom — tambah kolom dulu", pgCsv:"Tempel CSV", pgCsvImp:"Impor CSV", pgRow:"Baris {i}/{n}",
@@ -86,7 +86,7 @@ const I18N = {
     n_wait:"Tunggu muncul", n_gone:"Tunggu hilang", n_sleep:"Jeda", n_iff:"Jika elemen ada", n_repeat:"Ulangi", n_comment:"Catatan",
     pgFuncs:"Function", pgFuncTip:"Klik function untuk menambah langkah, atau nyalakan \"Ambil\" lalu klik elemen di layar HP.",
     pgGrab:"Ambil", pgGrabHint:"Ambil langkah dari layar: klik elemen di HP untuk menambahkannya ke alur", pgGrabOn:"Mode ambil aktif — klik elemen di layar HP", pgGrabOff:"Mode ambil mati",
-    n_tapD:"Ketuk elemen", n_longpressD:"Tekan lama elemen", n_doubletapD:"Ketuk dua kali", n_textD:"Ketik teks ke field", n_keyD:"Tekan tombol sistem", n_swipeD:"Geser dari titik ke titik", n_scrollD:"Geser layar", n_launchD:"Jalankan aplikasi", n_shotD:"Ambil screenshot", pgHold:"Durasi", pgPkgPh:"Pilih aplikasi…", pgAppSearch:"Cari aplikasi…",
+    n_tapD:"Ketuk elemen", n_longpressD:"Tekan lama elemen", n_doubletapD:"Ketuk dua kali", n_textD:"Ketik teks ke field", n_keyD:"Tekan tombol sistem", n_swipeD:"Geser dari titik ke titik", n_scrollD:"Geser layar", n_launchD:"Jalankan aplikasi", n_shotD:"Ambil screenshot", pgHold:"Durasi", pgPkgPh:"Pilih aplikasi…", pgAppSearch:"Cari aplikasi…", pgActPick:"Pilih activity…", pgActSearch:"Cari activity (mis. \"add an account\")…", pgActLauncher:"(launcher — default)", pgArrange:"Rapikan otomatis", pgUndo:"Kembalikan posisi terakhir", pgArranged:"Flow dirapikan", pgRestored:"Posisi dikembalikan", pgNoUndo:"Belum ada posisi tersimpan",
     n_waitD:"Tunggu elemen muncul", n_goneD:"Tunggu elemen hilang", n_sleepD:"Jeda beberapa milidetik", n_iffD:"Percabangan: jika ada → lalu/kalau tidak", n_repeatD:"Ulangi langkah N kali", n_commentD:"Catatan (tidak dijalankan)",
     vApp:"Aplikasi", appT:"Aplikasi & Intent", amCur:"Layar ini", amBrowse:"Semua aplikasi",
     ak_user:"Pengguna", ak_system:"Sistem", ak_all:"Semua", appSearchPh:"Cari package…", appSearchPh2:"Cari aktivitas / package (mis. \"add an account\")…", appPkgMatch:"{n} package cocok", appActSearching:"Mencari aktivitas di semua aplikasi…", appActNone:"Nggak ada aktivitas yang cocok", appActCount:"{n} aktivitas di {a} aplikasi", appListLoad:"Memuat daftar aplikasi…",
@@ -162,8 +162,8 @@ const I18N = {
     emuMgr:"Emulators", emuHint:"Manage emulators: open, close, restart, create, delete", emuDesc:"Every emulator installed on this PC. Controlled through each brand's official CLI.", emuRefresh:"Refresh", emuLaunch:"Open", emuStop:"Close", emuRestart:"Restart", emuDelete:"Delete", emuCreate:"Create instance", emuRunning:"running", emuStopped:"stopped", emuNoInst:"No instances yet", emuNoCreate:"Create/delete instances via the Multi-Instance Manager (no CLI)", emuConfirmDel:"Delete instance \"{name}\"? This can't be undone. Click Delete again.", emuNamePh:"Name (optional)", emuBusy:"Working…", emuDone:"Done: {msg}",
     emuConfig:"Device settings", emuRename:"Rename", emuClone:"Clone", emuTpl:"Template", emuTplSave:"Save", emuTplNew:"— new template —", emuTplNone:"No templates yet", emuApply:"Apply to this device", emuCfgTitle:"Settings · {name}", emuCfgCaps:"Supported: {caps}", emuCfgNone:"This brand can't be configured via CLI", emuTplNamePrompt:"Template name:", emuRenamePrompt:"New name:", emuClonePrompt:"New instance name (optional):", emuCfgApplied:"Settings applied — restart the instance to take effect", emuTplSaved:"Template \"{name}\" saved", emuTplDeleted:"Template deleted", emuPickTpl:"Pick a template to delete first", emuAndroidVer:"Android version",
     fCpu:"CPU (cores)", fMemory:"RAM (MB)", fWidth:"Width", fHeight:"Height", fDpi:"DPI", fManufacturer:"Manufacturer", fModel:"Model", fImei:"IMEI", fAndroidid:"Android ID", fMac:"MAC", fPhonenumber:"Phone no.", fAutoHint:'use "auto" to randomize',
-    pgRun:"Run", pgStop:"Stop", pgStopping:"Stopping…", pgDone:"Flow finished", pgFailAt:"Failed at {t}",
-    pgCopy:"Copy", pgImport:"Import", pgImported:"Flow imported", pgPreview:"Code preview", pgEmpty:"(empty flow)",
+    pgRun:"Run", pgStop:"Stop", pgStopping:"Stopped", pgDone:"Flow finished", pgFailAt:"Failed at {t}", pgRunLog:"Run log", pgLogEmpty:"No runs yet — hit Run; failures show here with the step, error, and XPath.", pgLogClear:"Clear log", pgLogStart:"Run started", updAvail:"Update available", updN:"Update available · {n} commits", updBtn:"Update now", updView:"View changes", updDismiss:"Dismiss", updPulling:"Updating…", updDone:"Updated to {v} — restart the server", updFail:"Update failed", updDirty:"You have uncommitted local changes. Pull may fail or overwrite them. Continue?",
+    pgCopy:"Copy", pgImport:"Import", pgImported:"Flow imported", pgImportBad:"Only JSON files import — export as JSON first (Py/MCP are code to run, not for re-import).", pgDlFlow:"Download flow (.json — full + data, re-importable)", pgDownloaded:"Flow downloaded (.json)", pgPreview:"Code preview", pgEmpty:"(empty flow)",
     pgData:"Data", pgDataHint:"Run the flow for each data row (variables {{col}})", pgDataT:"Data loop (variables)",
     pgDataDesc:"The flow runs once per row. Use {{column_name}} in text, selector, or package — it is replaced with the row value.",
     pgCol:"Column", pgRow2:"Row", pgVars:"Variables", pgNoVars:"No columns yet — add one first", pgCsv:"Paste CSV", pgCsvImp:"Import CSV", pgRow:"Row {i}/{n}",
@@ -176,7 +176,7 @@ const I18N = {
     n_wait:"Wait for element", n_gone:"Wait until gone", n_sleep:"Delay", n_iff:"If element exists", n_repeat:"Repeat", n_comment:"Comment",
     pgFuncs:"Functions", pgFuncTip:"Click a function to add a step, or turn on \"Grab\" then tap an element on the phone screen.",
     pgGrab:"Grab", pgGrabHint:"Grab a step from the screen: tap an element on the phone to add it to the flow", pgGrabOn:"Grab mode on — tap an element on the phone screen", pgGrabOff:"Grab mode off",
-    n_tapD:"Tap an element", n_longpressD:"Press and hold an element", n_doubletapD:"Tap twice quickly", n_textD:"Type text into a field", n_keyD:"Press a system key", n_swipeD:"Swipe from point to point", n_scrollD:"Scroll the screen", n_launchD:"Launch an app", n_shotD:"Take a screenshot", pgHold:"Duration", pgPkgPh:"Pick an app…", pgAppSearch:"Search apps…",
+    n_tapD:"Tap an element", n_longpressD:"Press and hold an element", n_doubletapD:"Tap twice quickly", n_textD:"Type text into a field", n_keyD:"Press a system key", n_swipeD:"Swipe from point to point", n_scrollD:"Scroll the screen", n_launchD:"Launch an app", n_shotD:"Take a screenshot", pgHold:"Duration", pgPkgPh:"Pick an app…", pgAppSearch:"Search apps…", pgActPick:"Pick activity…", pgActSearch:"Search activity (e.g. \"add an account\")…", pgActLauncher:"(launcher — default)", pgArrange:"Auto-arrange", pgUndo:"Restore last layout", pgArranged:"Flow tidied", pgRestored:"Layout restored", pgNoUndo:"No saved layout yet",
     n_waitD:"Wait for an element to appear", n_goneD:"Wait until an element is gone", n_sleepD:"Pause for milliseconds", n_iffD:"Branch: if exists → then/else", n_repeatD:"Repeat steps N times", n_commentD:"Note (not executed)",
     vApp:"App", appT:"App & Intent", amCur:"This screen", amBrowse:"All apps",
     ak_user:"User", ak_system:"System", ak_all:"All", appSearchPh:"Search package…", appSearchPh2:"Search activities / package (e.g. \"add an account\")…", appPkgMatch:"{n} packages match", appActSearching:"Searching activities across all apps…", appActNone:"No matching activities", appActCount:"{n} activities in {a} apps", appListLoad:"Loading app list…",
@@ -1504,10 +1504,29 @@ async function pgRunList(list, row){
   for (const n of list) {
     if (pgStop) return;
     pgRun[n.id] = "run"; pgRenderFlow();
-    try { await pgExec(n, row); pgRun[n.id] = "ok"; }
-    catch (e) { pgRun[n.id] = "fail"; pgRenderFlow(); throw new Error(t("pgFailAt", {t: t("n_" + n.type)}) + ": " + e.message); }
+    try { await pgExec(n, row); pgRun[n.id] = "ok"; if (!["comment", "iff", "repeat"].includes(n.type)) pgLogAdd("ok", n); }
+    catch (e) { pgRun[n.id] = "fail"; pgRenderFlow(); if (!e.__logged) { pgLogAdd("fail", n, e.message || t("err")); e.__logged = true; } throw e; }  // log the leaf failure once, then bubble unchanged (no double "Failed at…")
     pgRenderFlow();
   }
+}
+// ---------- run log (persists per run so failures stay visible & fixable) ----------
+let pgLog = [];
+function pgLogAdd(status, n, msg){
+  pgLog.push({time: new Date().toLocaleTimeString(), status,
+    label: t("n_" + n.type) + (pgSummary(n) ? " · " + pgSummary(n) : ""),
+    msg: msg || "", xp: status === "fail" && n.sel && n.sel.by !== "xy" ? selXPath({...n.sel}) : ""});
+  pgRenderLog(status === "fail");
+}
+function pgLogMsg(status, text){ pgLog.push({time: new Date().toLocaleTimeString(), status, label: text, msg: "", xp: ""}); pgRenderLog(status === "fail"); }
+function pgRenderLog(openOnFail){
+  const body = $("#pgLogBody"); if (!body) return;
+  const fails = pgLog.filter(l => l.status === "fail").length, cnt = $("#pgLogCnt");
+  if (cnt) cnt.textContent = pgLog.length ? (fails ? `· ${fails} ⚠` : `· ${pgLog.length}`) : "";
+  body.innerHTML = pgLog.length ? pgLog.map(l => {
+    const mk = l.status === "fail" ? "✗" : l.status === "ok" ? "✓" : l.status === "done" ? "✓" : "·";
+    return `<div class="pglrow ${esc(l.status)}"><span class="plt">${esc(l.time)}</span><span class="pli">${mk}</span><span class="pll">${esc(l.label)}${l.msg ? ` — ${esc(l.msg)}` : ""}${l.xp ? `<small>${esc(l.xp)}</small>` : ""}</span></div>`;
+  }).join("") : `<div class="pgtip">${t("pgLogEmpty")}</div>`;
+  if (openOnFail) { const w = $("#pgLogWrap"); if (w) w.open = true; }
 }
 // dataset rows as {col: value} objects; no data -> a single run with no variables
 function pgRows(){
@@ -1545,15 +1564,17 @@ async function pgRunFlow(){
   if (!flow.length) return;
   pgRunning = true; pgStop = false; pgRun = {}; $("#pgRun").hidden = true; $("#pgStop").hidden = false;
   const wasLive = streaming, rows = pgRows();
+  pgLog = []; pgLogMsg("info", "▶ " + t("pgLogStart") + (rows.length > 1 ? ` · ${rows.length}×` : ""));
   if (!wasLive) setLive(true);  // mirror the device live (left pane) while the flow runs
   try {
     for (let i = 0; i < rows.length && !pgStop; i++) {
-      if (rows.length > 1) { pgRun = {}; pgRenderFlow(); toast(t("pgRow", {i: i + 1, n: rows.length})); }
+      if (rows.length > 1) { pgRun = {}; pgRenderFlow(); pgLogMsg("info", t("pgRow", {i: i + 1, n: rows.length})); toast(t("pgRow", {i: i + 1, n: rows.length})); }
       await pgRunList(flow, rows[i]);
     }
-    if (!pgStop) toast("✓ " + t("pgDone") + (rows.length > 1 ? ` (${rows.length}×)` : ""));
+    if (!pgStop) { pgLogMsg("done", "✓ " + t("pgDone")); toast("✓ " + t("pgDone") + (rows.length > 1 ? ` (${rows.length}×)` : "")); }
+    else pgLogMsg("info", t("pgStopping"));
   }
-  catch (e) { toast(t("err") + ": " + e.message); }
+  catch (e) { const f = pgLog.find(l => l.status === "fail"); toast("✗ " + (f ? f.label : t("err"))); pgRenderLog(true); }  // detail is in the run log
   finally { pgRunning = false; $("#pgRun").hidden = false; $("#pgStop").hidden = true; if (!wasLive) setLive(false); dump(); pgRenderFlow(); }
 }
 
@@ -1593,7 +1614,7 @@ function pgPy(list, ind){
 }
 function pgMcp(list, ind){
   const line = (n, k) => {
-    const q = " ".repeat(k), xp = n.sel && selXPath(n.sel), X = () => `xpath="${selXPath(n.sel)}"`;
+    const q = " ".repeat(k), xp = n.sel && selXPath(n.sel), X = () => `xpath=${pyq(selXPath(n.sel))}`;
     switch (n.type) {
       case "tap": return n.sel.by === "xy" ? `${q}tap(x=${n.sel.x}, y=${n.sel.y})` : `${q}tap(${X()})`;
       case "longpress": return n.sel.by === "xy" ? `${q}tap(x=${n.sel.x}, y=${n.sel.y}, long_press_ms=${n.dur})` : `${q}tap(${X()}, long_press_ms=${n.dur})`;
@@ -1649,7 +1670,7 @@ function pgField(n){  // body editor per node
   if (n.type === "scroll") h += row(t("pgDir"), `<select data-k="dir">${["down", "up", "left", "right"].map(d => `<option${n.dir === d ? " selected" : ""}>${d}</option>`).join("")}</select>`);
   if (n.type === "launch") {
     h += row(t("pgPkg"), `<button class="appddbtn" data-pick="1">${n.pkg ? pgAppIcon(n.pkg) + `<span class="ddlbl">${esc(pgLabels[n.pkg] || n.pkg)}</span>` : `<span class="ddph">${t("pgPkgPh")}</span>`}<svg class="ic caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>`);
-    h += row(t("pgActivity"), `<input class="inp" data-k="activity" value="${esc(n.activity)}" placeholder="(launcher)">`);
+    h += row(t("pgActivity"), `<button class="appddbtn" data-actpick="1">${n.activity ? `<span class="ddlbl">${esc(n.activity.split(".").pop())}</span>` : `<span class="ddph">${t("pgActPick")}</span>`}<svg class="ic caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>`);
     if (!pgAppsLoaded) pgLoadApps(); if (n.pkg && !(n.pkg in pgLabels)) pgFetchLabels([n.pkg]).then(() => view === "play" && pgRenderFlow());
   }
   if (n.type === "sleep") h += row(t("pgDelay"), `<input class="inp num" type="number" min="0" data-k="ms" value="${n.ms}"> ms`);
@@ -1659,6 +1680,23 @@ function pgField(n){  // body editor per node
 // ---- free canvas: nodes carry x,y; the plane pans & zooms; connectors auto-route in step order ----
 let pgPan = (() => { try { return JSON.parse(store.get("pgPan")) || {x: 24, y: 24, z: 1} } catch { return {x: 24, y: 24, z: 1} } })();
 const pgSavePan = () => store.set("pgPan", JSON.stringify(pgPan));
+let pgLastPos = null;  // snapshot of node positions for the undo/restore button
+// Auto-arrange: stack top-level nodes in one tidy column (keeps measured heights so open bodies don't overlap).
+function pgArrange(){
+  if (!flow.length) return;
+  pgLastPos = flow.map(n => ({id: n.id, x: n.x, y: n.y}));
+  let y = 24; const x = 40, gap = 26;
+  flow.forEach(n => { const el = document.getElementById("pgn_" + n.id); n.x = x; n.y = y; y += (el ? el.offsetHeight : 84) + gap; });
+  pgSave(); pgRenderFlow(); pgFit(); toast(t("pgArranged"));
+}
+// Restore the positions from before the last arrange (toggles, so it also redoes).
+function pgRestorePos(){
+  if (!pgLastPos) return toast(t("pgNoUndo"));
+  const cur = flow.map(n => ({id: n.id, x: n.x, y: n.y}));
+  pgLastPos.forEach(p => { const n = flow.find(f => f.id === p.id); if (n) { n.x = p.x; n.y = p.y; } });
+  pgLastPos = cur;
+  pgSave(); pgRenderFlow(); pgFit(); toast(t("pgRestored"));
+}
 function ensurePositions(){
   let maxY = 24, lastX = 40;
   flow.forEach(n => { if (typeof n.x === "number") { maxY = Math.max(maxY, n.y); lastX = n.x; } });
@@ -1705,6 +1743,8 @@ function pgNodeEl(n, parent, nested){
     if (fb) fb.onclick = () => { const b = bestSel(sel); if (b) { Object.assign(n.sel, b); pgSave(); pgRenderFlow(); } };
     const pk = d.querySelector("[data-pick]");
     if (pk) pk.onclick = () => appPicker(pk, pkg => { n.pkg = pkg; pgSave(); pgRenderFlow(); });
+    const ak = d.querySelector("[data-actpick]");
+    if (ak) ak.onclick = () => activityPicker(ak, n);
   }
   return d;
 }
@@ -1889,6 +1929,48 @@ function appPicker(anchor, onPick){
   m.querySelector("#appddq").focus();
   setTimeout(() => document.addEventListener("click", function h(e){ if (!m.contains(e.target) && !anchor.contains(e.target)) { m.remove(); document.removeEventListener("click", h); } }), 0);
 }
+// Activity picker for the "Open app" node: lists the chosen package's activities + cross-app search (Shortcut-Maker style).
+function activityPicker(anchor, node){
+  document.querySelector(".appddpanel")?.remove();
+  const m = document.createElement("div"); m.className = "appddpanel";
+  m.innerHTML = `<input class="inp sm" id="actddq" placeholder="${t("pgActSearch")}" autocomplete="off"><div class="appddlist" id="actddlist"></div>`;
+  document.body.append(m);
+  const listEl = m.querySelector("#actddlist"); let q = "", pkgActs = null, timer = null;
+  const pick = (pkg, act) => { if (pkg) node.pkg = pkg; node.activity = act; pgSave(); pgRenderFlow(); m.remove(); };
+  const wire = () => {
+    listEl.querySelectorAll("[data-a]").forEach(b => b.onclick = () => pick(b.dataset.p, b.dataset.a));
+    const l = listEl.querySelector("[data-launch]"); if (l) l.onclick = () => pick(node.pkg, "");
+  };
+  function showPkg(){
+    if (!node.pkg) return listEl.innerHTML = `<div class="pgtip">${t("pgPkgPh")}</div>`;
+    if (!pkgActs) return listEl.innerHTML = `<div class="actLoad"><i class="spin"></i>${t("appActSearching")}</div>`;
+    listEl.innerHTML = `<button class="appddrow" data-launch="1"><span class="ddi"><b>${t("pgActLauncher")}</b></span></button>` +
+      pkgActs.map(a => `<button class="appddrow" data-p="${esc(node.pkg)}" data-a="${esc(a.name)}"><span class="ddi"><b>${esc(a.name.startsWith(node.pkg) ? a.name.slice(node.pkg.length).replace(/^\./, "") : a.name)}</b><small>${esc(a.name)}</small></span>${a.launcher ? '<span class="ddstar">★</span>' : ""}</button>`).join("");
+    wire();
+  }
+  function showSearch(groups){
+    if (!groups) return listEl.innerHTML = `<div class="actLoad"><i class="spin"></i>${t("appActSearching")}</div>`;
+    if (!groups.length) return listEl.innerHTML = `<div class="pgtip">${t("appActNone")}</div>`;
+    listEl.innerHTML = groups.map(g => `<div class="ddgrp">${pgAppIcon(g.package)}<span class="ddgt"><b>${esc(g.label)}</b><small>${esc(g.package)}</small></span></div>` +
+      g.activities.map(a => `<button class="appddrow" data-p="${esc(g.package)}" data-a="${esc(a.name)}"><span class="ddi"><b>${esc(a.label || a.name.split(".").pop())}</b><small>${esc(a.name)}</small></span></button>`).join("")).join("");
+    wire();
+  }
+  async function loadPkg(){
+    showPkg(); if (!node.pkg) return;
+    try { const d = await api("/api/app", {serial: serial(), pkg: node.pkg}); pkgActs = d.activities || []; } catch (e) { pkgActs = []; }
+    if (!q) showPkg();
+  }
+  async function search(){
+    const dev = serial(), cur = q; showSearch(null);
+    try { const r = await api("/api/searchact", {serial: dev, q: cur, kind: "all"}); if (q === cur) showSearch(r.groups); }
+    catch (e) { if (q === cur) showSearch([]); }
+  }
+  m.querySelector("#actddq").oninput = e => { q = e.target.value.trim(); clearTimeout(timer); if (q.length < 2) return showPkg(); timer = setTimeout(search, 300); };
+  loadPkg();
+  const r = anchor.getBoundingClientRect(); m.style.left = Math.min(r.left, innerWidth - 320) + "px"; m.style.top = Math.min(r.bottom + 4, innerHeight - 380) + "px";
+  m.querySelector("#actddq").focus();
+  setTimeout(() => document.addEventListener("click", function h(e){ if (!m.contains(e.target) && !anchor.contains(e.target)) { m.remove(); document.removeEventListener("click", h); } }), 0);
+}
 function pgRenderPalette(){
   const box = $("#pgPalette"); if (!box) return;
   box.innerHTML = PG_GROUPS.map(([g, types]) => `<h5>${t(g)}</h5>` + types.map(ty =>
@@ -1954,10 +2036,56 @@ $("#pgRun").onclick = pgRunFlow;
 $("#pgStop").onclick = () => { pgStop = true; toast(t("pgStopping")); };
 document.querySelectorAll("#pgFmt button").forEach(b => b.onclick = () => { pgFmt = b.dataset.f; store.set("pgFmt", pgFmt); pgRenderFlow(); });
 $("#pgCopy").onclick = () => copy(pgExport());
-$("#pgDl").onclick = () => { const blob = new Blob([pgExport()], {type: "text/plain"}), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "flow." + (pgFmt === "mcp" ? "txt" : pgFmt === "json" ? "json" : "py"); a.click(); URL.revokeObjectURL(a.href); };
+$("#pgDl").onclick = () => {  // download ALWAYS exports JSON (flow + data) — the only re-importable format, so saved/shared files round-trip. Copy/preview still follow the Py/MCP/JSON toggle.
+  const json = JSON.stringify({tool: "inceptor-ai-playground", v: 1, data: pgData, flow}, null, 2);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([json], {type: "application/json"})); a.download = "inceptor-flow.json"; a.click(); URL.revokeObjectURL(a.href);
+  toast(t("pgDownloaded"));
+};
 $("#pgImport").onclick = () => $("#pgFile").click();
-$("#pgFile").onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { const j = JSON.parse(r.result); flow = Array.isArray(j) ? j : j.flow || []; if (j.data && j.data.cols) { pgData = j.data; pgSaveData(); } pgSave(); pgRenderFlow(); toast(t("pgImported")); } catch (x) { toast(t("err") + ": " + x.message); } }; r.readAsText(f); e.target.value = ""; };
+$("#pgFile").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const txt = String(r.result).replace(/^﻿/, "").trim();
+    let j; try { j = JSON.parse(txt); } catch (x) { return toast(t("pgImportBad")); }  // Py/MCP exports are code, not re-importable — only the JSON format is
+    const nf = Array.isArray(j) ? j : j.flow;
+    if (!Array.isArray(nf)) return toast(t("pgImportBad"));
+    flow = nf;
+    if (j.data && j.data.cols) { pgData = j.data; pgSaveData(); }
+    pgSave(); pgRenderFlow(); pgFit(); toast(t("pgImported"));
+  };
+  r.readAsText(f); e.target.value = "";
+};
 $("#pgDataBtn").onclick = pgOpenData;
+$("#pgArrange").onclick = pgArrange;
+$("#pgUndo").onclick = pgRestorePos;
+$("#pgLogClear").onclick = e => { e.preventDefault(); e.stopPropagation(); pgLog = []; pgRenderLog(); };
+
+// ---------- self-update (compare local git HEAD with GitHub, one-click pull) ----------
+async function checkUpdate(){
+  try {
+    const r = await api("/api/update/check");
+    if (!r.available || store.get("updDismiss") === r.latest) return;  // nothing new, or this version was dismissed
+    const bar = $("#updBar"); if (!bar) return;
+    const title = r.behind ? t("updN", {n: r.behind}) : t("updAvail");
+    bar.innerHTML = `<span class="updmsg">${ic("spark")}<b>${title}</b><code>${esc(r.current)} → ${esc(r.latest)}</code></span>
+      <a class="btn ghost sm" href="${esc(r.url)}" target="_blank" rel="noopener">${t("updView")}</a>
+      <button class="btn pri sm" id="updNow">${ic("download")}${t("updBtn")}</button>
+      <button class="x" id="updX" title="${esc(t("updDismiss"))}">×</button>`;
+    paintIcons(bar); bar.hidden = false;
+    $("#updX").onclick = () => { store.set("updDismiss", r.latest); bar.hidden = true; };
+    $("#updNow").onclick = async () => {
+      if (r.dirty && !confirm(t("updDirty"))) return;
+      const b = $("#updNow"); b.disabled = true; b.textContent = t("updPulling");
+      try {
+        const res = await api("/api/update/pull");
+        if (res.ok) { bar.innerHTML = `<span class="updmsg">${ic("check")}<b>${t("updDone", {v: res.current})}</b></span>`; paintIcons(bar); }
+        else { toast(t("updFail") + ": " + res.error); b.disabled = false; b.textContent = t("updBtn"); }
+      } catch (e) { toast(t("updFail") + ": " + e.message); b.disabled = false; b.textContent = t("updBtn"); }
+    };
+  } catch (e) {}
+}
 $("#pgClear").onclick = () => { if (!pgClearArm) { pgClearArm = 1; $("#pgClear").classList.add("danger"); toast(t("confirmClear")); setTimeout(() => { pgClearArm = 0; $("#pgClear").classList.remove("danger"); }, 4000); return; } flow = []; pgClearArm = 0; $("#pgClear").classList.remove("danger"); pgSave(); pgRenderFlow(); };
 let page = "work";
-paintIcons(); applyTheme(); applyLang(); loadDevices().then(() => serial() && devices.length === 1 && dump());
+paintIcons(); applyTheme(); applyLang(); pgRenderLog(); checkUpdate(); loadDevices().then(() => serial() && devices.length === 1 && dump());
