@@ -364,6 +364,20 @@ pre.ij{margin:0 14px;max-height:min(260px,32vh);overflow:auto;background:var(--s
 .appItem .ai b{font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .appItem .ai small{color:var(--mut);font-size:11px}
 .appItem .star{color:var(--m-xp);flex:none}.appItem .star svg{width:15px;height:15px}
+.appHint.pkgh{margin-top:6px;border-top:1px solid var(--line);padding-top:8px}
+.actLoad{display:flex;align-items:center;gap:8px;padding:14px;color:var(--mut);font-size:12px}
+.actGroup{margin:4px 8px 8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.actGHd{display:flex;align-items:center;gap:9px;padding:7px 10px;background:var(--soft)}
+.actGHd .ai{min-width:0;flex:1;display:flex;flex-direction:column}
+.actGHd .ai b{font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actGHd .ai small{color:var(--mut);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actGHd .star{color:var(--m-xp);flex:none}.actGHd .star svg{width:14px;height:14px}
+.actRow{display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--line)}
+.actRow .ai{min-width:0;flex:1;display:flex;flex-direction:column}
+.actRow .ai b{font-weight:500;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actRow .ai small{color:var(--mut);font-size:10.5px;font-family:var(--mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actRow.ro{opacity:.62}
+.actRow .btn.sm.icon{padding:4px 6px}
 .appHero .appIc img{width:100%;height:100%;object-fit:cover;border-radius:11px}
 .appHero .appIc{overflow:hidden;background:var(--soft)}.appHero .appIc .avtxt{width:100%;height:100%;border-radius:0}
 .appHero .sub[data-copy]{cursor:copy}

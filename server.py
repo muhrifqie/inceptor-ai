@@ -651,6 +651,145 @@ def app_detail(serial, pkg):
                 "hasIcon": _icon(a, pkg, vc) is not None}
 
 
+_NS = "{http://schemas.android.com/apk/res/android}"
+_actwarm = set()
+
+
+def _app_acts(serial, pkg):
+    """List an app's activities (name + exported/launcher + raw label ref) by streaming ONLY AndroidManifest.xml —
+    no full apk pull, no arsc. Cached to .apkcache/<pkg>-<vc>.acts.json. Labels stay as @refs here; resolved lazily."""
+    _pkg(pkg)
+    vn, vc = pkg_version(serial, pkg)
+    APK_CACHE.mkdir(exist_ok=True)
+    cf = APK_CACHE / f"{pkg}-{vc}.acts.json"
+    if cf.exists():
+        try:
+            return json.loads(cf.read_text("utf-8"))
+        except Exception:  # noqa: BLE001
+            pass
+    out = {"package": pkg, "vc": vc, "labelRef": None, "resolved": False, "activities": []}
+    try:
+        from androguard.core.axml import AXMLPrinter
+        apk = _apk_device_path(serial, pkg)
+        xml = AXMLPrinter(adb("exec-out", "unzip", "-p", apk, "AndroidManifest.xml", serial=serial, binary=True)).get_xml_obj()
+        appel = xml.find("application")
+        out["labelRef"] = appel.get(_NS + "label") if appel is not None else None
+        for el in xml.iter():
+            if el.tag not in ("activity", "activity-alias"):
+                continue
+            name = el.get(_NS + "name")
+            if not name:
+                continue
+            if name.startswith("."):
+                name = pkg + name
+            elif "." not in name:
+                name = pkg + "." + name
+            filters = el.findall("intent-filter")
+            launcher = any(any(a.get(_NS + "name") == "android.intent.action.MAIN" for a in f.findall("action"))
+                           and any(c.get(_NS + "name") == "android.intent.category.LAUNCHER" for c in f.findall("category"))
+                           for f in filters)
+            declared = el.get(_NS + "exported")
+            out["activities"].append({"name": name, "labelRef": el.get(_NS + "label"),
+                                      "exported": declared == "true" or (declared is None and bool(filters)),
+                                      "launcher": launcher})
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        cf.write_text(json.dumps(out), "utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _resolve_labels(serial, pkg, refs):
+    """Resolve a set of @resource label refs to strings via one streamed resources.arsc. {ref: text}."""
+    refs = {r for r in refs if r and str(r).startswith("@")}
+    if not refs:
+        return {}
+    res = {}
+    try:
+        from androguard.core.axml import ARSCParser
+        apk = _apk_device_path(serial, pkg)
+        arsc = ARSCParser(adb("exec-out", "unzip", "-p", apk, "resources.arsc", serial=serial, binary=True))
+        for r in refs:
+            try:
+                for _, val in arsc.get_resolved_res_configs(int(str(r)[1:], 16)):
+                    if isinstance(val, str) and val and not val.startswith("res/"):
+                        res[r] = val.strip('"'); break
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
+def warm_activities(serial, pkgs):
+    """Background: pre-stream each app's manifest so the first cross-app activity search is fast."""
+    def go(pk):
+        try:
+            _app_acts(serial, pk)
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            _actwarm.discard((serial, pk))
+    for pk in pkgs:
+        k = (serial, pk)
+        if k not in _actwarm:
+            _actwarm.add(k)
+            _warm_pool.submit(go, pk)
+
+
+def _resolve_app(serial, d):
+    """Resolve + cache all label refs of one app (one arsc stream), so later searches are instant & label-searchable."""
+    if d.get("resolved"):
+        return d
+    pkg = d["package"]
+    labs = _resolve_labels(serial, pkg, {d.get("labelRef")} | {a.get("labelRef") for a in d["activities"]})
+    d["label"] = labs.get(d.get("labelRef")) or pkg
+    for a in d["activities"]:
+        a["label"] = labs.get(a.get("labelRef")) or a["name"].rsplit(".", 1)[-1]
+    d["resolved"] = True
+    try:
+        (APK_CACHE / f"{pkg}-{d.get('vc', 0)}.acts.json").write_text(json.dumps(d), "utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+    return d
+
+
+def search_activities(serial, q, kind="all", limit=80):
+    """Shortcut-Maker-style: find activities across all apps by class name or resolved label, grouped by app."""
+    q = (q or "").strip().lower()
+    if len(q) < 2:
+        return []
+    toks = [w for w in q.split() if len(w) >= 2]
+    big = [w for w in toks if len(w) >= 3] or toks  # tokens worth a cheap pre-filter (skip "an", "to", ...)
+    if not toks:
+        return []
+    apps = list_apps(serial, kind)
+    with ThreadPoolExecutor(8) as ex:
+        details = list(ex.map(lambda a: _app_acts(serial, a["package"]), apps))
+    launch = {a["package"]: a["launcher"] for a in apps}
+
+    def act_match(a):  # every token must appear in class name OR resolved label
+        hay = (a["name"] + " " + (a.get("label") or "")).lower()
+        return all(w in hay for w in toks)
+
+    groups = []
+    for d in details:
+        # cheap pre-filter (no arsc): a significant token hits some class name -> worth resolving labels
+        if not any(w in a["name"].lower() for a in d["activities"] for w in big):
+            continue
+        d = _resolve_app(serial, d)  # resolve + cache this app's labels (once), enables label-text matching
+        hits = [a for a in d["activities"] if act_match(a)]
+        if not hits:
+            continue
+        hits.sort(key=lambda a: (not a["launcher"], not a["exported"], a["name"]))
+        groups.append({"package": d["package"], "label": d["label"],
+                       "launcher": launch.get(d["package"]), "activities": hits[:25]})
+    groups.sort(key=lambda g: (not g["launcher"], g["label"].lower()))
+    return groups[:limit]
+
+
 def app_icon(serial, pkg):
     """Launcher icon, cached as a small file. Fast path streams one zip entry via on-device `unzip` (no multi-MB pull);
     the slow path (adaptive / obfuscated names) pulls the apk once and composites with androguard. Runs in parallel."""
@@ -858,7 +997,10 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/apps":
             rows = list_apps(s, q.get("kind", "user"))
             warm_icons(s, [r["package"] for r in rows])  # background, non-blocking; launchable sort first
+            warm_activities(s, [r["package"] for r in rows])  # pre-stream manifests for cross-app activity search
             return {"apps": rows}
+        if path == "/api/searchact":
+            return {"groups": search_activities(s, q.get("q", ""), q.get("kind", "all"))}
         if path == "/api/app":
             return app_detail(s, q["pkg"])
         if path == "/api/applabels":

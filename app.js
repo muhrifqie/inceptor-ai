@@ -89,7 +89,7 @@ const I18N = {
     n_tapD:"Ketuk elemen", n_longpressD:"Tekan lama elemen", n_doubletapD:"Ketuk dua kali", n_textD:"Ketik teks ke field", n_keyD:"Tekan tombol sistem", n_swipeD:"Geser dari titik ke titik", n_scrollD:"Geser layar", n_launchD:"Jalankan aplikasi", n_shotD:"Ambil screenshot", pgHold:"Durasi", pgPkgPh:"Pilih aplikasi…", pgAppSearch:"Cari aplikasi…",
     n_waitD:"Tunggu elemen muncul", n_goneD:"Tunggu elemen hilang", n_sleepD:"Jeda beberapa milidetik", n_iffD:"Percabangan: jika ada → lalu/kalau tidak", n_repeatD:"Ulangi langkah N kali", n_commentD:"Catatan (tidak dijalankan)",
     vApp:"Aplikasi", appT:"Aplikasi & Intent", amCur:"Layar ini", amBrowse:"Semua aplikasi",
-    ak_user:"Pengguna", ak_system:"Sistem", ak_all:"Semua", appSearchPh:"Cari package…", appListLoad:"Memuat daftar aplikasi…",
+    ak_user:"Pengguna", ak_system:"Sistem", ak_all:"Semua", appSearchPh:"Cari package…", appSearchPh2:"Cari aktivitas / package (mis. \"add an account\")…", appPkgMatch:"{n} package cocok", appActSearching:"Mencari aktivitas di semua aplikasi…", appActNone:"Nggak ada aktivitas yang cocok", appActCount:"{n} aktivitas di {a} aplikasi", appListLoad:"Memuat daftar aplikasi…",
     appCount:"{n} aplikasi", appNone:"Tidak ada aplikasi", disabled:"nonaktif", appParse:"Membaca APK (activity, izin)…",
     appBack:"Daftar", appOpen:"Buka", appDisable:"Nonaktifkan", appEnable:"Aktifkan", appUninstall:"Hapus", sure:"Yakin?",
     appLinks:"Deep link", appActsH:"Activity", appActPh:"Cari activity…", appPerms:"Izin", scMake:"Buat shortcut",
@@ -179,7 +179,7 @@ const I18N = {
     n_tapD:"Tap an element", n_longpressD:"Press and hold an element", n_doubletapD:"Tap twice quickly", n_textD:"Type text into a field", n_keyD:"Press a system key", n_swipeD:"Swipe from point to point", n_scrollD:"Scroll the screen", n_launchD:"Launch an app", n_shotD:"Take a screenshot", pgHold:"Duration", pgPkgPh:"Pick an app…", pgAppSearch:"Search apps…",
     n_waitD:"Wait for an element to appear", n_goneD:"Wait until an element is gone", n_sleepD:"Pause for milliseconds", n_iffD:"Branch: if exists → then/else", n_repeatD:"Repeat steps N times", n_commentD:"Note (not executed)",
     vApp:"App", appT:"App & Intent", amCur:"This screen", amBrowse:"All apps",
-    ak_user:"User", ak_system:"System", ak_all:"All", appSearchPh:"Search package…", appListLoad:"Loading app list…",
+    ak_user:"User", ak_system:"System", ak_all:"All", appSearchPh:"Search package…", appSearchPh2:"Search activities / package (e.g. \"add an account\")…", appPkgMatch:"{n} packages match", appActSearching:"Searching activities across all apps…", appActNone:"No matching activities", appActCount:"{n} activities in {a} apps", appListLoad:"Loading app list…",
     appCount:"{n} apps", appNone:"No apps", disabled:"disabled", appParse:"Reading APK (activities, permissions)…",
     appBack:"Apps", appOpen:"Open", appDisable:"Disable", appEnable:"Enable", appUninstall:"Uninstall", sure:"Sure?",
     appLinks:"Deep links", appActsH:"Activities", appActPh:"Search activity…", appPerms:"Permissions", scMake:"Make shortcut",
@@ -1046,6 +1046,7 @@ function setView(v){
 // ---------- app & intent of the foreground screen ----------
 let appInfo = null, appErr = "", appBusy = false;
 let appMode = store.get("appMode") || "current", appList = null, appKind = store.get("appKind") || "user", appListErr = "", appListBusy = false, appQuery = "", appDetail = null, appDetailErr = "", appDetailBusy = false, appActFilter = "", appLog = "", uninstallArm = null;
+let appActs = null, appActBusy = false, appActErr = "", _appActT = null;  // cross-app activity search (Shortcut-Maker style)
 // Intent activity flags (android.content.Intent FLAG_ACTIVITY_*); unknown low bits are shown as hex.
 const FLAGS = [[0x40000000,"NO_HISTORY"],[0x20000000,"SINGLE_TOP"],[0x10000000,"NEW_TASK"],[0x08000000,"MULTIPLE_TASK"],
   [0x04000000,"CLEAR_TOP"],[0x02000000,"FORWARD_RESULT"],[0x01000000,"PREVIOUS_IS_TOP"],[0x00800000,"EXCLUDE_FROM_RECENTS"],
@@ -1149,24 +1150,55 @@ function renderList(){
   const box = $("#appBody"); if (!box) return;
   const q = appQuery.toLowerCase();
   const rows = (appList || []).filter(a => !q || a.package.toLowerCase().includes(q));
+  const searching = appQuery.trim().length >= 2;
   box.innerHTML = `
     <div class="appTools">
       <div class="seg sm" id="appKindSeg">${["user","system","all"].map(k => `<button data-k="${k}"${k === appKind ? ' class="on"' : ""}>${t("ak_" + k)}</button>`).join("")}</div>
-      <input class="inp sm" id="appSearch" placeholder="${t("appSearchPh")}" value="${esc(appQuery)}">
+      <input class="inp sm" id="appSearch" placeholder="${t("appSearchPh2")}" value="${esc(appQuery)}">
     </div>
+    <div id="appActBox"></div>
+    ${searching ? `<div class="appHint pkgh">${t("appPkgMatch", {n: rows.length})}</div>` : ""}
     ${appListBusy ? `<div class="empty"><i class="spin"></i>${t("appListLoad")}</div>`
       : appListErr ? `<div class="empty">${ic("apps")}<b>${t("err")}</b>${esc(appListErr)}</div>`
-      : !rows.length ? `<div class="empty">${ic("apps")}<b>${t("appNone")}</b></div>`
-      : `<div class="appHint">${t("appCount", {n: rows.length})}</div><div class="appList">` + rows.map(a => `
+      : !rows.length ? (searching ? "" : `<div class="empty">${ic("apps")}<b>${t("appNone")}</b></div>`)
+      : `${searching ? "" : `<div class="appHint">${t("appCount", {n: rows.length})}</div>`}<div class="appList">` + rows.map(a => `
         <button class="appItem" data-pkg="${esc(a.package)}">
           ${listIcon(a.package)}
           <span class="ai"><b>${esc(a.package)}</b><small>vc ${a.versionCode}${a.system ? " · system" : ""}${a.enabled ? "" : " · " + t("disabled")}</small></span>
           ${a.launchable ? `<span class="star" title="launcher">${ic("target")}</span>` : ""}
         </button>`).join("") + `</div>`}`;
-  box.querySelectorAll("#appKindSeg button").forEach(b => b.onclick = () => { appKind = b.dataset.k; store.set("appKind", appKind); appList = null; loadAppList() });
+  box.querySelectorAll("#appKindSeg button").forEach(b => b.onclick = () => { appKind = b.dataset.k; store.set("appKind", appKind); appList = null; appActs = null; loadAppList(); if (appQuery.trim().length >= 2) loadActs() });
   const si = $("#appSearch");
-  if (si) si.oninput = () => { appQuery = si.value; const c = si.selectionStart; renderList(); const n = $("#appSearch"); n.focus(); n.setSelectionRange(c, c) };
+  if (si) si.oninput = () => { appQuery = si.value; const c = si.selectionStart; renderList(); const n = $("#appSearch"); if (n){ n.focus(); n.setSelectionRange(c, c) } clearTimeout(_appActT); _appActT = setTimeout(loadActs, 350); };
   box.querySelectorAll(".appItem").forEach(b => b.onclick = () => openAppDetail(b.dataset.pkg));
+  renderActs();
+}
+
+async function loadActs(){
+  const q = appQuery.trim();
+  if (q.length < 2) { appActs = null; appActErr = ""; return renderActs(); }
+  const dev = serial(); appActBusy = true; renderActs();
+  try { const r = await api("/api/searchact", {serial: dev, q, kind: "all"}); if (serial() === dev && appQuery.trim() === q) { appActs = r.groups; appActErr = "" } }  // activities always searched across all apps (Shortcut-Maker style), independent of the User/System/All package filter
+  catch (e) { if (appQuery.trim() === q) { appActs = []; appActErr = e.message } }
+  finally { appActBusy = false; renderActs(); }
+}
+function renderActs(){
+  const box = $("#appActBox"); if (!box) return;
+  if (appQuery.trim().length < 2) { box.innerHTML = ""; return; }
+  if (appActErr) { box.innerHTML = `<div class="appHint">${esc(appActErr)}</div>`; return; }
+  if (!appActs) { box.innerHTML = `<div class="actLoad"><i class="spin"></i>${t("appActSearching")}</div>`; return; }
+  if (!appActs.length) { box.innerHTML = `<div class="appHint">${t("appActNone")}</div>`; return; }
+  const total = appActs.reduce((n, g) => n + g.activities.length, 0);
+  box.innerHTML = `<div class="appHint">${t("appActCount", {n: total, a: appActs.length})}${appActBusy ? ' <i class="spin"></i>' : ""}</div>` +
+    appActs.map(g => `<div class="actGroup">
+      <div class="actGHd">${listIcon(g.package)}<span class="ai"><b>${esc(g.label)}</b><small>${esc(g.package)}</small></span>${g.launcher ? `<span class="star" title="launcher">${ic("target")}</span>` : ""}</div>
+      ${g.activities.map(a => `<div class="actRow${a.exported ? "" : " ro"}">
+        <span class="ai"><b>${esc(a.label || a.name.split(".").pop())}</b><small>${esc(a.name)}</small></span>
+        <button class="btn sm icon" data-op="${esc(g.package)}|${esc(a.name)}" title="${t("appOpen")}">${ic("target")}</button>
+        <button class="btn sm icon" data-scp="${esc(g.package)}|${esc(a.name)}" title="${t("scMake")}">${ic("link")}</button>
+      </div>`).join("")}</div>`).join("");
+  box.querySelectorAll("[data-op]").forEach(b => b.onclick = () => { const [p, a] = b.dataset.op.split("|"); openActivity(p, a) });
+  box.querySelectorAll("[data-scp]").forEach(b => b.onclick = () => { const [p, a] = b.dataset.scp.split("|"); shortcut(p, a, a.split(".").pop()) });
 }
 
 async function openAppDetail(pkg){

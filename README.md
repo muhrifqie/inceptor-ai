@@ -6,12 +6,32 @@ Built on Python stdlib + `adb`. No framework, no build step — one `server.py`,
 
 ![inspect · playground · emulators](https://img.shields.io/badge/ADB-inspector%20%2B%20automation%20%2B%20MCP-7c3aed)
 
+## Screenshots
+
+**Inspector** — phone mirror, UI tree with graded selectors
+![Inspector](docs/01-inspector.png)
+
+**Playground** — n8n-style automation canvas
+![Playground](docs/02-playground.png)
+
+**Emulator Manager** — create / open / close / restart / delete across brands, with Android-version picker
+![Emulator Manager](docs/03-emulator-manager.png)
+
+**Device-settings template** — CPU, RAM, resolution and fingerprint per instance
+![Device settings](docs/04-device-settings.png)
+
+**App & activity browser** — every installed app with icons
+![App browser](docs/05-app-browser.png)
+
+**Cross-app activity search** — find any activity by name or label, grouped by app (Shortcut-Maker style)
+![Activity search](docs/06-activity-search.png)
+
 ## Features
 
 - **UI inspector** — screenshot + live MJPEG stream (~5 fps), accessibility tree with element-kind badges, click an element to grab a graded selector (resource-id / text / desc / XPath), live XPath tester.
 - **Recorder** — record coordinate-free flows; export to uiautomator2 Python, MCP calls, or XPath.
 - **Playground** — n8n-style free canvas: drag/pan/zoom nodes, auto-routed connectors, grab steps straight off the phone screen. Actions (tap, long-press, double-tap, type, key, swipe, scroll, open app, screenshot), waits (wait for / until gone / delay), logic (if / repeat / comment), and a **data loop** (`{{col}}` variables over a table of rows). Exports to Python / MCP / JSON.
-- **App & activity browser** — every package and **every** activity from the APK (via androguard), exported/launcher flags, deep links, permissions; launch any activity, make a Windows `.lnk` shortcut, enable/disable/uninstall/backup.
+- **App & activity browser** — every package and **every** activity from the APK (via androguard), exported/launcher flags, deep links, permissions; launch any activity, make a Windows `.lnk` shortcut, enable/disable/uninstall/backup. **Cross-app activity search** (Shortcut-Maker style): type "add an account" and it finds `Settings · AddAccountSettings` across all apps, grouped by app, each openable.
 - **Emulator Manager** — create, open, close, restart, delete, rename, clone instances across **MuMu, LDPlayer (9/14/4), MEmu, Nox, BlueStacks** via each vendor's official CLI, with an **Android-version picker** on create and a **device-settings template** (CPU, RAM, resolution, manufacturer, model, IMEI, Android ID, MAC, phone number) for multi-account isolation.
 - **MCP server** — 20 tools so an AI agent can see the screen, read the UI tree, act with selectors, browse apps, and manage emulators in natural language.
 
