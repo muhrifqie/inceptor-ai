@@ -919,14 +919,17 @@ def update_check():
         return {"git": True, "available": False, "error": "update check failed: " + str(e)}
     if latest == head:
         return {"git": True, "available": False, "current": head[:7], "latest": latest[:7], "branch": branch}
-    behind, msgs = None, []
-    try:  # how many commits ahead the remote is, + their subject lines
+    behind, msgs, reachable = 0, [], False
+    try:  # commits the remote has beyond the local HEAD, + their subject lines
         cmp = _gh("/compare/" + head + "..." + latest)
-        behind = cmp.get("ahead_by")
+        behind = cmp.get("ahead_by") or 0
         msgs = [c["commit"]["message"].split("\n", 1)[0] for c in cmp.get("commits", [])][-12:]
-    except Exception:  # noqa: BLE001 - local HEAD not on remote (local commits) -> compare 404s; still offer the pull
+        reachable = True
+    except Exception:  # noqa: BLE001 - local HEAD not on remote (local/unpushed commits) -> compare 404s
         pass
-    code, dirty = _git("status", "--porcelain")
+    if not (reachable and behind > 0):  # SHAs differ only because local is ahead/diverged/unpushed -> nothing newer to pull, don't nag
+        return {"git": True, "available": False, "current": head[:7], "latest": latest[:7], "branch": branch, "ahead": True}
+    _, dirty = _git("status", "--porcelain")
     return {"git": True, "available": True, "current": head[:7], "latest": latest[:7], "branch": branch,
             "behind": behind, "messages": msgs, "dirty": bool(dirty.strip()),
             "url": "https://github.com/" + UPDATE_REPO + "/compare/" + head[:7] + "..." + branch}
