@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inceptor AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="logo" data-i18n-title="tagline"><i><svg class="ic" data-ic="spark"></svg></i>Inceptor<b class="ai">AI</b></div>
+  <div class="devbox" id="devBox" data-i18n-title="deviceHint">
+    <button class="devbtn" id="devBtn" aria-haspopup="true"><span class="dot" id="dot"></span><span class="ek" id="devKind" hidden></span><span id="devLbl"></span><svg class="ic" data-ic="chev"></svg></button>
+    <select id="dev" hidden></select>
+    <div class="devpop" id="devPop" hidden>
+      <div class="dph"><b data-i18n="devsT"></b><span id="devCount"></span></div>
+      <div class="dcards" id="dcards"></div>
+      <div class="dpf"><button class="btn sm" id="dpScan"><svg class="ic" data-ic="radar"></svg><span data-i18n="scan"></span></button>
+        <button class="btn sm" id="dpConn"><svg class="ic" data-ic="link"></svg><span data-i18n="connect"></span></button></div>
+    </div>
+    <button class="btn ghost sm icon" id="btnDevs" data-i18n-title="refreshDevices"><svg class="ic" data-ic="refresh"></svg></button></div>
+  <button class="btn" id="btnScan" data-i18n-title="scanHint"><svg class="ic" data-ic="radar"></svg><span data-i18n="scan"></span></button>
+  <details class="pop" id="connPop">
+    <summary class="btn"><svg class="ic" data-ic="link"></svg><span data-i18n="connect"></span></summary>
+    <div class="popbody">
+      <p data-i18n="connectHint"></p>
+      <div style="display:flex;gap:6px"><input class="inp" id="addr" style="flex:1" placeholder="127.0.0.1:16384"><button class="btn pri" id="btnConn" data-i18n="connectBtn"></button></div>
+    </div>
+  </details>
+  <button class="btn" id="btnPlay" data-i18n-title="pgHint"><svg class="ic" data-ic="flow"></svg><span data-i18n="playground"></span></button>
+  <button class="btn" id="btnEmu" data-i18n-title="emuHint"><svg class="ic" data-ic="grid"></svg><span data-i18n="emuMgr"></span></button>
+  <span class="sp"></span>
+  <div class="seg" id="langSeg"><button data-lang="id">ID</button><button data-lang="en">EN</button></div>
+  <button class="btn ghost icon" id="btnTheme" data-i18n-title="theme"><svg class="ic" data-ic="moon"></svg></button>
+  <button class="btn ghost icon" id="btnHelp" data-i18n-title="help"><svg class="ic" data-ic="help"></svg></button>
+</header>
+
+<div id="boot"><div class="bl"><i class="spin"></i><span data-i18n="booting"></span></div></div>
+<section id="landing" hidden>
+  <div class="ldGrid">
+    <aside class="ldCol ldSide">
+      <div class="ldStat" id="ldStat">
+        <div class="radar"><i></i><i></i><svg class="ic" data-ic="phone"></svg></div>
+        <h2 data-i18n="ndT"></h2>
+        <p class="wait" id="waitTxt"></p>
+        <div class="pbar"><i id="pbar"></i></div>
+        <div class="pmap"><div class="pmh"><span data-i18n="pmT"></span><span id="pmSum"></span></div><div class="pmg" id="pmap"></div>
+          <div class="pml"><span><i class="ok"></i><span data-i18n="pmOk"></span></span><span><i class="open"></i><span data-i18n="pmOpen"></span></span><span><i></i><span data-i18n="pmShut"></span></span></div></div>
+        <div id="ldDevs"></div>
+        <div class="ndAct">
+          <button class="btn pri sm" id="ndScan"><svg class="ic" data-ic="radar"></svg><span data-i18n="scan"></span></button>
+          <button class="btn sm" id="ndConn"><svg class="ic" data-ic="link"></svg><span data-i18n="connect"></span></button>
+        </div>
+        <button class="btn ghost sm ldSkip" id="ndSkip"><span data-i18n="ldSkip"></span> →</button>
+      </div>
+      <div class="ldCard">
+        <h1 data-i18n="ldT"></h1>
+        <p class="lead" data-i18n="ldIntro"></p>
+        <ul class="feat" data-i18n-html="ldFeat"></ul>
+      </div>
+    </aside>
+
+    <div class="ldCol ldCard ldMain">
+      <h1 data-i18n="ldSetup"></h1>
+      <p class="lead" data-i18n="ldSetupSub"></p>
+      <ol class="stepper">
+        <li id="lsAdb" class="cur"><div class="sn">1</div><div class="sb">
+          <b data-i18n="l1"></b><span class="st" id="lsAdbSt"></span>
+          <p data-i18n-html="l1d"></p>
+          <pre>winget install Google.PlatformTools</pre></div></li>
+        <li class="done"><div class="sn">2</div><div class="sb">
+          <b data-i18n="l2"></b><span class="st ok" id="lsSrvSt"></span>
+          <p data-i18n="l2d"></p>
+          <pre>python server.py</pre></div></li>
+        <li id="lsDev" class="cur"><div class="sn">3</div><div class="sb">
+          <b data-i18n="l3"></b>
+          <div class="seg" id="howSeg"><button data-how="emu"><svg class="ic" data-ic="monitor"></svg>Emulator</button><button data-how="usb"><svg class="ic" data-ic="phone"></svg>USB</button><button data-how="wifi"><svg class="ic" data-ic="wifi"></svg>Wi-Fi</button></div>
+          <div class="howWrap"><ol class="howB" id="howB"></ol>
+          <table class="ports" id="ports"><thead><tr><th>Emulator</th><th data-i18n="thPort"></th><th data-i18n="thNote"></th></tr></thead><tbody data-i18n-html="portsB"></tbody></table></div>
+        </div></li>
+        <li id="lsAuto" class="cur"><div class="sn">4</div><div class="sb">
+          <b data-i18n="l4"></b>
+          <p data-i18n="l4d"></p></div></li>
+      </ol>
+    </div>
+
+    <aside class="ldCol ldSide">
+      <div class="ldCard aiCard">
+        <h1><svg class="ic" data-ic="bot"></svg><span data-i18n="aiT"></span></h1>
+        <p class="lead" data-i18n="aiSub"></p>
+        <pre>claude mcp add -s user android-inceptor -- python "C:\BOT\Android Inceptor\mcp_server.py"</pre>
+        <p class="lead aiEx" data-i18n="aiExT"></p>
+        <div class="aiPrompts" data-i18n-html="aiEx"></div>
+      </div>
+      <div class="ldCard">
+        <h1 data-i18n="ldTrouble"></h1>
+        <div class="faq" data-i18n-html="ldFaq"></div>
+      </div>
+      <div class="ldCard">
+        <h1 data-i18n="ldCmds"></h1>
+        <p class="lead" data-i18n="ldCmdsSub"></p>
+        <div class="cmds"><pre>adb devices -l</pre><pre>adb connect 127.0.0.1:16384</pre><pre>adb kill-server &amp;&amp; adb start-server</pre><pre>adb pair 192.168.1.20:37123</pre><pre>adb tcpip 5555</pre></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<main id="main" hidden>
+  <section class="card">
+    <div class="head">
+      <button class="btn sm" id="btnRec" data-i18n-title="recHint"><span class="recdot"></span><span id="recLbl" data-i18n="rec"></span></button>
+      <span class="sp"></span>
+      <div class="seg" id="modeSeg">
+        <button data-mode="inspect" class="on" data-i18n-title="inspectHint"><svg class="ic" data-ic="target"></svg><span data-i18n="inspect"></span></button>
+        <button data-mode="control" data-i18n-title="controlHint"><svg class="ic" data-ic="hand"></svg><span data-i18n="control"></span></button>
+      </div>
+      <button class="btn pri sm" id="btnDump" data-i18n-title="dumpHint"><svg class="ic" data-ic="camera"></svg><span data-i18n="dump"></span></button>
+    </div>
+    <div class="stage" id="stage">
+      <div id="shotWrap" hidden><img id="shot" alt=""><canvas id="ov"></canvas><div id="tip"></div></div>
+      <div class="shotLoad" id="shotLoad" hidden><i class="spin"></i><span data-i18n="capturing"></span></div>
+      <div class="guide" id="guide">
+        <div id="startBox">
+          <h3 data-i18n="welcome"></h3><p data-i18n="welcomeSub"></p>
+          <div class="step" id="st1"><b>1</b><span data-i18n="s1"></span></div>
+          <div class="step" id="st2"><b>2</b><span data-i18n="s2"></span></div>
+          <div class="step" id="st3"><b>3</b><span data-i18n="s3"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="textbar">
+      <button class="btn icon" data-key="4" data-i18n-title="back"><svg class="ic" data-ic="back"></svg></button>
+      <button class="btn icon" data-key="3" data-i18n-title="home"><svg class="ic" data-ic="home"></svg></button>
+      <button class="btn icon" data-key="187" data-i18n-title="recent"><svg class="ic" data-ic="square"></svg></button>
+      <input class="inp" id="txt" data-i18n-ph="typeText">
+      <button class="btn icon" id="btnTxt" data-i18n-title="send"><svg class="ic" data-ic="send"></svg></button>
+      <label class="btn" data-i18n-title="liveHint" style="gap:7px"><input type="checkbox" id="live" style="margin:0;accent-color:var(--acc)"><span data-i18n="live"></span></label>
+    </div>
+  </section>
+  <div class="gut" data-col="1"></div>
+
+  <section class="card">
+    <div id="treePane" class="pane">
+      <div class="head">
+        <h2><span data-i18n="tree"></span> <small id="count"></small></h2>
+        <div class="seg sm" id="qMode" data-i18n-title="qModeHint"><button data-q="text" class="on" data-i18n="qText"></button><button data-q="xpath">XPath</button></div>
+        <label class="search"><svg class="ic" data-ic="search"></svg><input class="inp" id="q" data-i18n-ph="search"></label>
+        <button class="btn ghost sm icon" id="btnExp" data-i18n-title="expand"><svg class="ic" data-ic="expand"></svg></button>
+        <button class="btn ghost sm icon" id="btnCol" data-i18n-title="collapse"><svg class="ic" data-ic="collapse"></svg></button>
+      </div>
+      <div class="crumbs" id="crumbs"><div class="legend"><span style="color:var(--id)">resource-id</span><span style="color:var(--txt)">text</span><span style="color:var(--desc)">content-desc</span></div></div>
+      <div class="scroll"><div id="tree"></div></div>
+    </div>
+    <div id="flowPane" class="pane" hidden>
+      <div class="head">
+        <h2><svg class="ic" data-ic="flow" style="width:16px;height:16px;color:var(--acc);vertical-align:-3px"></svg> <span data-i18n="pgTitle"></span> <small id="pgCount"></small></h2>
+        <span class="sp"></span>
+        <button class="btn sm" id="pgGrabBtn" data-i18n-title="pgGrabHint"><svg class="ic" data-ic="target"></svg><span data-i18n="pgGrab"></span></button>
+        <select class="inp sm" id="pgGrabType" title="grab as" style="width:auto;height:28px"><option value="tap">Tap</option><option value="wait">Wait</option><option value="gone">Gone</option><option value="iff">If</option></select>
+        <div class="seg sm" id="pgZoom" data-i18n-title="pgZoomHint"><button data-z="out">–</button><button data-z="fit"><svg class="ic" data-ic="fit"></svg></button><button data-z="in">+</button></div>
+        <button class="btn pri sm" id="pgRun"><svg class="ic" data-ic="play"></svg><span data-i18n="pgRun"></span></button>
+        <button class="btn sm danger" id="pgStop" hidden><svg class="ic" data-ic="stop"></svg><span data-i18n="pgStop"></span></button>
+      </div>
+      <div class="pgtools">
+        <button class="btn sm" id="pgDataBtn" data-i18n-title="pgDataHint"><svg class="ic" data-ic="table"></svg><span data-i18n="pgData"></span> <span class="cnt"></span></button>
+        <span class="sp"></span>
+        <div class="seg sm" id="pgFmt"><button data-f="py" class="on">Py</button><button data-f="mcp">MCP</button><button data-f="json">JSON</button></div>
+        <span class="sp"></span>
+        <button class="btn ghost sm icon" id="pgCopy" data-i18n-title="pgCopy"><svg class="ic" data-ic="copy"></svg></button>
+        <button class="btn ghost sm icon" id="pgDl" title="Download"><svg class="ic" data-ic="download"></svg></button>
+        <button class="btn ghost sm icon" id="pgImport" data-i18n-title="pgImport"><svg class="ic" data-ic="upload"></svg></button>
+        <button class="btn ghost sm icon" id="pgClear" title="Clear"><svg class="ic" data-ic="trash"></svg></button>
+      </div>
+      <div class="scroll"><div class="pgflow" id="pgFlow"></div></div>
+      <details class="pgcodewrap"><summary><span data-i18n="pgPreview"></span></summary><pre class="pgcode" id="pgCode"></pre></details>
+      <input type="file" id="pgFile" accept="application/json,.json" hidden>
+    </div>
+  </section>
+  <div class="gut" data-col="3"></div>
+
+  <section class="card">
+    <div class="toptabs">
+      <button class="tab on" data-view="el"><span data-i18n="vEl"></span></button>
+      <button class="tab" data-view="rec"><span data-i18n="vRec"></span><span class="cnt" id="recCnt">0</span></button>
+      <button class="tab" data-view="app"><span data-i18n="vApp"></span></button>
+      <button class="tab" data-view="play"><svg class="ic" data-ic="flow" style="width:14px;height:14px"></svg><span data-i18n="playground"></span></button>
+    </div>
+    <div class="col" id="props"></div>
+    <div class="col" id="recView" hidden></div>
+    <div class="col" id="appView" hidden></div>
+    <div class="col" id="playView" hidden>
+      <div class="head"><h2><span data-i18n="pgFuncs"></span></h2></div>
+      <div class="pgtip"><svg class="ic" data-ic="target"></svg><span data-i18n="pgFuncTip"></span></div>
+      <div class="scroll" id="pgPalette"></div>
+    </div>
+  </section>
+</main>
+
+
+<footer>
+  <span><span class="dot" id="dot2"></span><span id="fDev">—</span></span>
+  <span class="mchip" id="fMode"></span>
+  <span class="mono" id="fAct"></span>
+  <span class="sp"></span>
+  <span class="mono" id="xy"></span>
+  <span id="fTime"></span>
+</footer>
+
+<dialog id="dlgHelp">
+  <h3 data-i18n="help"></h3>
+  <div class="keys">
+    <kbd>R</kbd><span data-i18n="kR"></span>
+    <kbd>M</kbd><span data-i18n="kM"></span>
+    <kbd>/</kbd><span data-i18n="kSlash"></span>
+    <kbd>↑ ↓</kbd><span data-i18n="kArrows"></span>
+    <kbd>C</kbd><span data-i18n="kC"></span>
+    <kbd>Esc</kbd><span data-i18n="kEsc"></span>
+  </div>
+  <p class="mut" data-i18n="helpSel" style="margin:16px 0"></p>
+  <form method="dialog" style="text-align:right"><button class="btn pri">OK</button></form>
+</dialog>
+<dialog id="pgDataDlg" class="datadlg">
+  <div class="ddlghd"><h3><svg class="ic" data-ic="table"></svg> <span data-i18n="pgDataT"></span></h3><span class="sp"></span><form method="dialog"><button class="btn sm">OK</button></form></div>
+  <p class="mut" data-i18n="pgDataDesc" style="margin:4px 0 12px;font-size:12.5px"></p>
+  <div id="pgDataTable"></div>
+</dialog>
+<dialog id="dlgEmu" class="emudlg">
+  <div class="ddlghd"><h3><svg class="ic" data-ic="grid"></svg> <span data-i18n="emuMgr"></span></h3><span class="sp"></span>
+    <button class="btn sm ghost" id="emuRefresh"><svg class="ic" data-ic="refresh"></svg><span data-i18n="emuRefresh"></span></button>
+    <form method="dialog"><button class="btn sm">OK</button></form></div>
+  <p class="mut" data-i18n="emuDesc" style="margin:4px 0 12px;font-size:12.5px"></p>
+  <div id="emuBody"><div class="emuload"><i class="spin"></i></div></div>
+</dialog>
+<dialog id="dlgEmuCfg" class="emudlg" style="max-width:480px">
+  <div class="ddlghd"><h3><svg class="ic" data-ic="sliders"></svg> <span id="cfgTitle"></span></h3><span class="sp"></span><form method="dialog"><button class="btn sm ghost">✕</button></form></div>
+  <div class="cfgtpl"><label data-i18n="emuTpl"></label>
+    <select id="cfgTplSel" class="inp sm"></select>
+    <button class="btn sm" id="cfgTplSave"><svg class="ic" data-ic="save"></svg><span data-i18n="emuTplSave"></span></button>
+    <button class="btn sm danger" id="cfgTplDel"><svg class="ic" data-ic="trash"></svg></button></div>
+  <div class="cfggrid" id="cfgGrid"></div>
+  <div class="cfgfoot"><span class="mut" id="cfgCaps"></span><span class="sp"></span>
+    <button class="btn pri" id="cfgApply"><svg class="ic" data-ic="check"></svg><span data-i18n="emuApply"></span></button></div>
+</dialog>
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+.apkcache/
+__pycache__/
+*.pyc
